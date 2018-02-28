@@ -292,6 +292,7 @@ static void bbr_set_pacing_rate(struct sock *sk, u32 bw, int gain)
 		sk->sk_pacing_rate = rate;
 }
 
+
 static u32 bbr_min_tso_segs(struct sock *sk)
 {
 	return sk->sk_pacing_rate < (bbr_min_tso_rate >> 3) ? 1 : 2;
@@ -326,6 +327,7 @@ static u32 bbr_tso_segs_goal(struct sock *sk)
 	struct tcp_sock *tp = tcp_sk(sk);
 
 	return  bbr_tso_segs_generic(sk, tp->mss_cache, GSO_MAX_SIZE);
+
 }
 
 /* Save "last known good" cwnd so we can restore it after losses or PROBE_RTT */
