@@ -877,6 +877,7 @@ static void bbr_check_drain(struct sock *sk, const struct rate_sample *rs)
 		bbr->mode = BBR_DRAIN;	/* drain queue we created */
 		tcp_sk(sk)->snd_ssthresh =
 				bbr_inflight(sk, bbr_max_bw(sk), BBR_UNIT);
+
 	}	/* fall through to check if in-flight is already small: */
 	if (bbr->mode == BBR_DRAIN &&
 	    tcp_packets_in_flight(tcp_sk(sk)) <=
