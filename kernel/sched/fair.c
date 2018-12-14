@@ -11150,6 +11150,16 @@ voluntary_active_balance(struct lb_env *env)
 	    env->src_rq->misfit_task_load)
 		return 1;
 
+	return 0;
+}
+
+static int need_active_balance(struct lb_env *env)
+{
+	struct sched_domain *sd = env->sd;
+
+	if (voluntary_active_balance(env))
+		return 1;
+
 	return unlikely(sd->nr_balance_failed > sd->cache_nice_tries+2);
 }
 
