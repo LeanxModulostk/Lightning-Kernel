@@ -519,6 +519,7 @@ static void bbr_set_cwnd(struct sock *sk, const struct rate_sample *rs,
 
 	/* If we're below target cwnd, slow start cwnd toward target cwnd. */
 
+
 	if (bbr_full_bw_reached(sk))  /* only cut cwnd if we filled the pipe */
 		cwnd = min(cwnd + acked, target_cwnd);
 	else if (cwnd < target_cwnd || tp->delivered < TCP_INIT_CWND)
