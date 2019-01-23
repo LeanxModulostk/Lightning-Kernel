@@ -448,6 +448,7 @@ static u32 bbr_ack_aggregation_cwnd(struct sock *sk)
 	return aggr_cwnd;
 }
 
+
 /* An optimization in BBR to reduce losses: On the first round of recovery, we
  * follow the packet conservation principle: send P packets per P packets acked.
  * After that, we slow-start and send at most 2*P packets per P packets acked.
@@ -517,6 +518,7 @@ static void bbr_set_cwnd(struct sock *sk, const struct rate_sample *rs,
 	target_cwnd = bbr_quantization_budget(sk, target_cwnd);
 
 	/* If we're below target cwnd, slow start cwnd toward target cwnd. */
+
 	if (bbr_full_bw_reached(sk))  /* only cut cwnd if we filled the pipe */
 		cwnd = min(cwnd + acked, target_cwnd);
 	else if (cwnd < target_cwnd || tp->delivered < TCP_INIT_CWND)
