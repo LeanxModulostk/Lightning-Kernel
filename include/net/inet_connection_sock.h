@@ -344,6 +344,7 @@ static inline bool inet_csk_in_pingpong_mode(struct sock *sk)
 {
 	return inet_csk(sk)->icsk_ack.pingpong >= TCP_PINGPONG_THRESH;
 }
+<<<<<<< HEAD
 
 static inline void inet_csk_inc_pingpong_cnt(struct sock *sk)
 {
@@ -352,4 +353,6 @@ static inline void inet_csk_inc_pingpong_cnt(struct sock *sk)
 	if (icsk->icsk_ack.pingpong < U8_MAX)
 		icsk->icsk_ack.pingpong++;
 }
+=======
+>>>>>>> f2eeb3f2724d ([BACKPORT]tcp: Refactor pingpong code)
 #endif /* _INET_CONNECTION_SOCK_H */
