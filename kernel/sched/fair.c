@@ -13420,6 +13420,7 @@ void check_for_migration(struct rq *rq, struct task_struct *p)
 	int new_cpu = -1;
 	int cpu = smp_processor_id();
 	int prev_cpu = task_cpu(p);
+	int ret;
 	struct sched_domain *sd = NULL;
 
 	if (rq->misfit_task_load) {
