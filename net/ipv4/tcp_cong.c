@@ -183,6 +183,7 @@ void tcp_init_congestion_control(struct sock *sk)
 	//DeepCC initialization
 	tcp_sk(sk)->deepcc_enable = 0;
 	tcp_sk(sk)->prior_ssthresh = 0;
+	tcp_sk(sk)->fast_ack_mode = 0;
 	if (icsk->icsk_ca_ops->init)
 		icsk->icsk_ca_ops->init(sk);
 	if (tcp_ca_needs_ecn(sk))
