@@ -72,7 +72,7 @@ MODULE_PARM_DESC(tcp_friendliness, "turn on/off tcp friendliness");
 module_param(hystart, int, 0644);
 MODULE_PARM_DESC(hystart, "turn on/off hybrid slow start algorithm");
 module_param(hystart_detect, int, 0644);
-MODULE_PARM_DESC(hystart_detect, "hybrid slow start detection mechanisms"
+MODULE_PARM_DESC(hystart_detect, "hyrbrid slow start detection mechanisms"
 		 " 1: packet-train 2: delay 3: both packet-train and delay");
 module_param(hystart_low_window, int, 0644);
 MODULE_PARM_DESC(hystart_low_window, "lower bound cwnd for hybrid slow start");
@@ -83,6 +83,7 @@ MODULE_PARM_DESC(hystart_ack_delta, "spacing between ack's indicating train (mse
 struct bictcp {
 	u32	cnt;		/* increase cwnd by 1 after ACKs */
 	u32	last_max_cwnd;	/* last maximum snd_cwnd */
+	u32	loss_cwnd;	/* congestion window at last loss */
 	u32	last_cwnd;	/* the last snd_cwnd */
 	u32	last_time;	/* time when updated last_cwnd */
 	u32	bic_origin_point;/* origin point of bic function */
@@ -103,7 +104,16 @@ struct bictcp {
 
 static inline void bictcp_reset(struct bictcp *ca)
 {
-	memset(ca, 0, offsetof(struct bictcp, unused));
+	ca->cnt = 0;
+	ca->last_max_cwnd = 0;
+	ca->last_cwnd = 0;
+	ca->last_time = 0;
+	ca->bic_origin_point = 0;
+	ca->bic_K = 0;
+	ca->delay_min = 0;
+	ca->epoch_start = 0;
+	ca->ack_cnt = 0;
+	ca->tcp_cwnd = 0;
 	ca->found = 0;
 }
 
@@ -132,6 +142,7 @@ static void bictcp_init(struct sock *sk)
 	struct bictcp *ca = inet_csk_ca(sk);
 
 	bictcp_reset(ca);
+	ca->loss_cwnd = 0;
 
 	if (hystart)
 		bictcp_hystart_reset(sk);
@@ -353,7 +364,16 @@ static u32 bictcp_recalc_ssthresh(struct sock *sk)
 	else
 		ca->last_max_cwnd = tp->snd_cwnd;
 
+	ca->loss_cwnd = tp->snd_cwnd;
+
 	return max((tp->snd_cwnd * beta) / BICTCP_BETA_SCALE, 2U);
+}
+
+static u32 bictcp_undo_cwnd(struct sock *sk)
+{
+	struct bictcp *ca = inet_csk_ca(sk);
+
+	return max(tcp_sk(sk)->snd_cwnd, ca->loss_cwnd);
 }
 
 static void bictcp_state(struct sock *sk, u8 new_state)
@@ -453,7 +473,7 @@ static struct tcp_congestion_ops cubictcp __read_mostly = {
 	.ssthresh	= bictcp_recalc_ssthresh,
 	.cong_avoid	= bictcp_cong_avoid,
 	.set_state	= bictcp_state,
-	.undo_cwnd	= tcp_reno_undo_cwnd,
+	.undo_cwnd	= bictcp_undo_cwnd,
 	.cwnd_event	= bictcp_cwnd_event,
 	.pkts_acked     = bictcp_acked,
 	.owner		= THIS_MODULE,
