@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SECONDS=0 # builtin bash timer
-ZIPNAME="Lightning.Kernel_$(TZ=Europe/Istanbul date +"%Y%m%d-%H%M").zip"
+ZIPNAME="Lightning.Plus.Kernel_$(TZ=Europe/Istanbul date +"%Y%m%d-%H%M").zip"
 TC_DIR="$HOME/tc/zyc"
 GCC_64_DIR="$HOME/tc/aarch64-linux-android-4.9"
 GCC_32_DIR="$HOME/tc/arm-linux-androideabi-4.9"
@@ -10,7 +10,7 @@ DEFCONFIG="vendor/ginkgo-perf_defconfig"
 KSU=false
 
 export PATH="$TC_DIR/bin:$PATH"
-export KBUILD_BUILD_USER="siimsek"
+export KBUILD_BUILD_USER="siimsek-ModxLean"
 export KBUILD_BUILD_HOST="linux"
 export KBUILD_BUILD_VERSION="1"
 
@@ -43,7 +43,7 @@ rm -rf KernelSU && curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/m
 if [ "$KSU" = true ]; then
 sed -i 's/CONFIG_LOCALVERSION="\(.*\)"/CONFIG_LOCALVERSION="\1-KSU"/' arch/arm64/configs/$DEFCONFIG
 sed -i 's/CONFIG_KSU=n/CONFIG_KSU=y/' arch/arm64/configs/$DEFCONFIG
-ZIPNAME="Lightning.Kernel_$(TZ=Europe/Istanbul date +"%Y%m%d-%H%M")_KSU.zip"
+ZIPNAME="Lightning.Plus.Kernel_$(TZ=Europe/Istanbul date +"%Y%m%d-%H%M")_KSU.zip"
 fi
 
 mkdir -p out
