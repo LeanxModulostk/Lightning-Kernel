@@ -12,8 +12,8 @@ jobs:
          run: |
              git clone --depth 1 https://github.com/LeanxModulostk/Lightning-Kernel.git -b plus kernel
              cd kernel
-             chmod 777 build2.sh
-             ./build2.sh
+             chmod 777 build-ksu.sh
+             ./build-ksu.sh
 
        - name: Uploading ZIP.
          run: |
