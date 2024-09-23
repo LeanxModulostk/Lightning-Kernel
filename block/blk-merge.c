@@ -708,6 +708,8 @@ static struct request *attempt_merge(struct request_queue *q,
 	 */
 	if (req->write_hint != next->write_hint)
 		return NULL;
+	if (req->ioprio != next->ioprio)
+		return 0;
 
 	/*
 	 * If we are allowed to merge, then append bio list
@@ -842,6 +844,10 @@ bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
 
 	/* Only merge if the crypt contexts are compatible */
 	if (!bio_crypt_ctx_compatible(bio, rq->bio))
+		return false;
+		
+	/* Prevent merging requests with different priorities */
+	if (rq->ioprio != bio_prio(bio))
 		return false;
 
 	return true;
