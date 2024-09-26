@@ -1,31 +1,61 @@
 #!/bin/bash
 
+set -e  # Exit immediately if a command exits with a non-zero status.
+
 SECONDS=0 # builtin bash timer
 ZIPNAME="Lean.Kernel-Ginkgo$(TZ=Europe/Istanbul date +"%Y%m%d-%H%M").zip"
 TC_DIR="$HOME/tc/weebx"
-GCC_64_DIR="$HOME/tc/aarch64-linux-android-4.9"
-GCC_32_DIR="$HOME/tc/arm-linux-androideabi-4.9"
 AK3_DIR="$HOME/android/AnyKernel3"
-DEFCONFIG="vendor/ginkgo-perf_defconfig"
+DEFCONFIG="vendor/lean-perf_defconfig"
+
+# Create TC_DIR if it doesn't exist
+mkdir -p "$HOME/tc"
 
 # Clang setup
 if ! [ -d "${TC_DIR}" ]; then
     echo "Clang not found! Downloading WeebX Clang..."
     CLANG_URL=$(curl -s https://raw.githubusercontent.com/v3kt0r-87/Clang-Stable/main/clang-weebx.txt)
-    ARCHIVE_NAME="weebx-clang.tar.gz"
+    if [ -z "$CLANG_URL" ]; then
+        echo "Failed to fetch Clang URL. Aborting..."
+        exit 1
+    fi
+    echo "Clang URL: $CLANG_URL"
     
-    if ! wget -P "$HOME/tc" "$CLANG_URL" -O "$HOME/tc/$ARCHIVE_NAME"; then
+    ARCHIVE_NAME="weebx-clang.tar.gz"
+    DOWNLOAD_PATH="$HOME/tc/$ARCHIVE_NAME"
+    
+    echo "Downloading Clang to $DOWNLOAD_PATH..."
+    if ! wget "$CLANG_URL" -O "$DOWNLOAD_PATH"; then
         echo "Failed to download Clang. Aborting..."
         exit 1
     fi
+    
+    if [ ! -f "$DOWNLOAD_PATH" ]; then
+        echo "Downloaded file not found at $DOWNLOAD_PATH. Aborting..."
+        exit 1
+    fi
 
+    echo "Creating directory ${TC_DIR}..."
     mkdir -p "${TC_DIR}"
-    if ! tar -xvf "$HOME/tc/$ARCHIVE_NAME" -C "${TC_DIR}"; then
+    
+    echo "Extracting Clang..."
+    if ! tar -xzf "$DOWNLOAD_PATH" -C "${TC_DIR}" --strip-components=1; then
         echo "Failed to extract Clang. Aborting..."
         exit 1
     fi
 
-    rm -f "$HOME/tc/$ARCHIVE_NAME"
+    echo "Removing downloaded archive..."
+    rm -f "$DOWNLOAD_PATH"
+    
+    echo "Clang setup completed successfully."
+else
+    echo "Clang directory found at ${TC_DIR}. Skipping download."
+fi
+
+# Check if clang binary exists
+if [ ! -f "${TC_DIR}/bin/clang" ]; then
+    echo "Clang binary not found at ${TC_DIR}/bin/clang. Setup may have failed."
+    exit 1
 fi
 
 export PATH="${TC_DIR}/bin:$PATH"
@@ -35,22 +65,8 @@ export KBUILD_BUILD_USER="linux"
 export KBUILD_BUILD_HOST="LeanHijosdesusMadres"
 export KBUILD_BUILD_VERSION="1"
 
-# GCC setup (unchanged)
-if ! [ -d "${GCC_64_DIR}" ]; then
-    echo "gcc not found! Cloning to ${GCC_64_DIR}..."
-    if ! git clone --depth=1 -b lineage-19.1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git ${GCC_64_DIR}; then
-        echo "Cloning failed! Aborting..."
-        exit 1
-    fi
-fi
-
-if ! [ -d "${GCC_32_DIR}" ]; then
-    echo "gcc_32 not found! Cloning to ${GCC_32_DIR}..."
-    if ! git clone --depth=1 -b lineage-19.1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git ${GCC_32_DIR}; then
-        echo "Cloning failed! Aborting..."
-        exit 1
-    fi
-fi
+# Set CROSS_COMPILE_ARM32 to prevent vDSO build error
+export CROSS_COMPILE_ARM32="${TC_DIR}/bin/arm-linux-gnueabi-"
 
 if [[ $1 = "-r" || $1 = "--regen" ]]; then
     make O=out ARCH=arm64 $DEFCONFIG savedefconfig
@@ -66,7 +82,20 @@ mkdir -p out
 make O=out ARCH=arm64 $DEFCONFIG
 
 echo -e "\nStarting compilation...\n"
-make -j$(nproc --all) O=out ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar AS=llvm-as NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip CROSS_COMPILE=$GCC_64_DIR/bin/aarch64-linux-android- CROSS_COMPILE_ARM32=$GCC_32_DIR/bin/arm-linux-androideabi- CLANG_TRIPLE=aarch64-linux-gnu- Image.gz-dtb dtbo.img
+make -j$(nproc --all) O=out \
+    ARCH=arm64 \
+    CC=clang \
+    LD=ld.lld \
+    AR=llvm-ar \
+    AS=llvm-as \
+    NM=llvm-nm \
+    OBJCOPY=llvm-objcopy \
+    OBJDUMP=llvm-objdump \
+    STRIP=llvm-strip \
+    CROSS_COMPILE=aarch64-linux-gnu- \
+    CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+    CLANG_TRIPLE=aarch64-linux-gnu- \
+    Image.gz-dtb dtbo.img
 
 if [ -f "out/arch/arm64/boot/Image.gz-dtb" ] && [ -f "out/arch/arm64/boot/dtbo.img" ]; then
     echo -e "\nKernel compiled successfully! Zipping up...\n"
