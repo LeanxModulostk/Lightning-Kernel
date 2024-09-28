@@ -44,6 +44,20 @@ config CFQ_GROUP_IOSCHED
 	---help---
 	  Enable group IO scheduling in CFQ.
 
+config IOSCHED_ANXIETY
+	tristate "Anxiety I/O scheduler"
+	default n
+	---help---
+	  The Anxiety I/O scheduler prioritizes latency over everything
+	  else. When a request comes in, it will use a lighweight
+	  selection algorithm to swiftly process the current pending task.	  
+config IOSCHED_ZEN
+	tristate "Zen I/O scheduler"
+	default n
+	---help---
+	FCFS, dispatches are back-inserted, deadlines ensure fairness.
+        Should work best with devices where there is no travel delay.
+
 config IOSCHED_ZEN
 	tristate "Zen I/O scheduler"
 	default y
@@ -74,16 +88,16 @@ choice
 		bool "CFQ" if IOSCHED_CFQ=y
 
 	config DEFAULT_MAPLE
-		bool "MAPLE" if IOSCHED_MAPLE=y	
+		bool "MAPLE" if IOSCHED_MAPLE=y
+
+    config DEFAULT_ANXIETY
+		bool "Anxiety" if IOSCHED_ANXIETY=y
 
 	config DEFAULT_ZEN
 		bool "ZEN" if IOSCHED_ZEN=y
 
 	config DEFAULT_NOOP
 		bool "No-op"
-
-	config DEFAULT_ZEN
-		bool "ZEN" if IOSCHED_ZEN=y
 
 	config DEFAULT_TRIPNDROID
 		bool "TD" if IOSCHED_TRIPNDROID=y
@@ -97,7 +111,7 @@ config DEFAULT_IOSCHED
 	default "maple" if DEFAULT_MAPLE
 	default "zen" if DEFAULT_ZEN
 	default "noop" if DEFAULT_NOOP
-	default "zen" if DEFAULT_ZEN
+	default "anxiety" if DEFAULT_ANXIETY
 	default "tripndroid" if DEFAULT_TRIPNDROID
 
 config MQ_IOSCHED_DEADLINE
