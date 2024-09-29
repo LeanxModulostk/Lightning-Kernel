@@ -420,7 +420,7 @@ static int show_vma_header_prefix(struct seq_file *m, unsigned long start,
 	out[len++] = ':';
 	len += print_vma_hex2(out + len, MINOR(dev));
 	out[len++] = ' ';
-	len += num_to_str(&out[len], 20, ino);
+	len += num_to_str(&out[len], 20, ino, 0);
 	out[len++] = ' ';
 	m->count += len;
 	return 0;
