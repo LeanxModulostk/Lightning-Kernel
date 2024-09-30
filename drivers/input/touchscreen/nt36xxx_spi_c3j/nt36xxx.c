@@ -1263,6 +1263,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	int32_t i = 0;
 	int32_t finger_cnt = 0;
 
+    pm_qos_update_request(&ts->pm_touch_req, 100);
 	pm_qos_update_request(&ts->pm_spi_req, 100);
 
 #if WAKEUP_GESTURE
@@ -1412,6 +1413,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 
 XFER_ERROR:
 	pm_qos_update_request(&ts->pm_spi_req, PM_QOS_DEFAULT_VALUE);
+	pm_qos_update_request(&ts->pm_touch_req, PM_QOS_DEFAULT_VALUE);
 
 	mutex_unlock(&ts->lock);
 
@@ -1828,7 +1830,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		NVT_LOG("int_trigger_type=%d\n", ts->int_trigger_type);
 		ts->irq_enabled = true;
 		ret = request_threaded_irq(client->irq, NULL, nvt_ts_work_func,
-				ts->int_trigger_type | IRQF_ONESHOT | IRQF_PERF_CRITICAL, NVT_SPI_NAME, ts);
+				ts->int_trigger_type | IRQF_ONESHOT, NVT_SPI_NAME, ts);
 		if (ret != 0) {
 			NVT_ERR("request irq failed. ret=%d\n", ret);
 			goto err_int_request_failed;
@@ -1839,10 +1841,14 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 
 		ts->pm_spi_req.type = PM_QOS_REQ_AFFINE_IRQ;
 		ts->pm_spi_req.irq = geni_spi_get_master_irq(client);
-		irq_set_perf_affinity(ts->pm_spi_req.irq);
 		pm_qos_add_request(&ts->pm_spi_req, PM_QOS_CPU_DMA_LATENCY,
 			PM_QOS_DEFAULT_VALUE);
 	}
+	
+	    ts->pm_touch_req.type = PM_QOS_REQ_AFFINE_IRQ;
+		ts->pm_touch_req.irq = client->irq;
+		pm_qos_add_request(&ts->pm_touch_req, PM_QOS_CPU_DMA_LATENCY,
+				PM_QOS_DEFAULT_VALUE);
 
 #if WAKEUP_GESTURE
 	device_init_wakeup(&ts->input_dev->dev, 1);
@@ -2068,6 +2074,7 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 	unregister_early_suspend(&ts->early_suspend);
 #endif
 
+    pm_qos_remove_request(&ts->pm_touch_req);
 	pm_qos_remove_request(&ts->pm_spi_req);
 
 #if NVT_TOUCH_MP
