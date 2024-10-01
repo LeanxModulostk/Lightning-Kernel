@@ -703,7 +703,6 @@ static void fts_irq_read_report(void)
 	fts_prc_queue_work(ts_data);
 #endif
 
-    pm_qos_update_request(&ts_data->pm_touch_req, 100);
 	pm_qos_update_request(&ts_data->pm_spi_req, 100);
 
 	ret = fts_read_parse_touchdata(ts_data);
@@ -718,7 +717,6 @@ static void fts_irq_read_report(void)
 	}
 
  	pm_qos_update_request(&ts_data->pm_spi_req, PM_QOS_DEFAULT_VALUE);
- 	pm_qos_update_request(&ts_data->pm_touch_req, PM_QOS_DEFAULT_VALUE);
 
 #if FTS_ESDCHECK_EN
 	fts_esdcheck_set_intr(0);
@@ -1603,11 +1601,6 @@ static int fts_ts_probe_entry(struct spi_device *client, struct fts_ts_data *ts_
 	pm_qos_add_request(&ts_data->pm_spi_req, PM_QOS_CPU_DMA_LATENCY,
 		PM_QOS_DEFAULT_VALUE);
 
-	ts_data->pm_touch_req.type = PM_QOS_REQ_AFFINE_IRQ;
-	ts_data->pm_touch_req.irq = client->irq;
-	pm_qos_add_request(&ts_data->pm_touch_req, PM_QOS_CPU_DMA_LATENCY,
-		PM_QOS_DEFAULT_VALUE);
-
 	ret = fts_irq_registration(ts_data);
 	if (ret) {
 		FTS_ERROR("request irq failed");
@@ -1637,7 +1630,7 @@ static int fts_ts_probe_entry(struct spi_device *client, struct fts_ts_data *ts_
 
 	FTS_FUNC_EXIT();
 	return 0;
-    pm_qos_remove_request(&ts_data->pm_touch_req);
+	
 err_irq_req:
 	pm_qos_remove_request(&ts_data->pm_spi_req);
 	fts_ts_enable_regulator(false);
@@ -1706,8 +1699,6 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
 	input_unregister_device(ts_data->input_dev);
 
 	pm_qos_remove_request(&ts_data->pm_spi_req);
-	
-	pm_qos_remove_request(&ts_data->pm_touch_req);
 
 	if (ts_data->ts_workqueue)
 		destroy_workqueue(ts_data->ts_workqueue);
