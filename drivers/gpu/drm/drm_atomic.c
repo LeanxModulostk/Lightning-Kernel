@@ -2251,7 +2251,7 @@ int drm_mode_atomic_ioctl(struct drm_device *dev,
 
 	if (!(arg->flags & DRM_MODE_ATOMIC_TEST_ONLY)) {
 		if (time_before(jiffies, last_input_time + msecs_to_jiffies(3000))) {
-			devfreq_boost_kick_max(DEVFREQ_CPU_DDR_BW, 50);
+			devfreq_boost_kick_max(DEVFREQ_MSM_CPUBW, 50);
 			cpu_input_boost_kick_max(50);
 		}
 	}
