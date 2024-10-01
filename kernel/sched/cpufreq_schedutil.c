@@ -123,6 +123,11 @@ static bool sugov_should_update_freq(struct sugov_policy *sg_policy, u64 time)
 		sg_policy->need_freq_update = true;
 		return true;
 	}
+	
+	/* If the last frequency wasn't set yet then we can still amend it */
+	if (sg_policy->work_in_progress)
+		return true;
+		
 	/* No need to recalculate next freq for min_rate_limit_us
 	 * at least. However we might still decide to further rate
 	 * limit once frequency change direction is decided, according
@@ -1066,9 +1071,10 @@ static int sugov_init(struct cpufreq_policy *policy)
 	}
 
 	tunables->up_rate_limit_us =
-				cpufreq_policy_transition_delay_us(policy);
+				CONFIG_SCHEDUTIL_UP_RATE_LIMIT;
 	tunables->down_rate_limit_us =
-				cpufreq_policy_transition_delay_us(policy);
+	                        CONFIG_SCHEDUTIL_DOWN_RATE_LIMIT;
+	                        
 	tunables->hispeed_load = DEFAULT_HISPEED_LOAD;
 	tunables->hispeed_freq = 0;
 
