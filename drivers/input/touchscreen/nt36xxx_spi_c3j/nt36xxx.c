@@ -1263,7 +1263,6 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	int32_t i = 0;
 	int32_t finger_cnt = 0;
 
-    pm_qos_update_request(&ts->pm_touch_req, 100);
 	pm_qos_update_request(&ts->pm_spi_req, 100);
 
 #if WAKEUP_GESTURE
@@ -1413,7 +1412,6 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 
 XFER_ERROR:
 	pm_qos_update_request(&ts->pm_spi_req, PM_QOS_DEFAULT_VALUE);
-	pm_qos_update_request(&ts->pm_touch_req, PM_QOS_DEFAULT_VALUE);
 
 	mutex_unlock(&ts->lock);
 
@@ -1844,11 +1842,6 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		pm_qos_add_request(&ts->pm_spi_req, PM_QOS_CPU_DMA_LATENCY,
 			PM_QOS_DEFAULT_VALUE);
 	}
-	
-	    ts->pm_touch_req.type = PM_QOS_REQ_AFFINE_IRQ;
-		ts->pm_touch_req.irq = client->irq;
-		pm_qos_add_request(&ts->pm_touch_req, PM_QOS_CPU_DMA_LATENCY,
-				PM_QOS_DEFAULT_VALUE);
 
 #if WAKEUP_GESTURE
 	device_init_wakeup(&ts->input_dev->dev, 1);
@@ -2074,7 +2067,6 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 	unregister_early_suspend(&ts->early_suspend);
 #endif
 
-    pm_qos_remove_request(&ts->pm_touch_req);
 	pm_qos_remove_request(&ts->pm_spi_req);
 
 #if NVT_TOUCH_MP
