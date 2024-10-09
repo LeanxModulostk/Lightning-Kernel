@@ -105,7 +105,7 @@ static void suspend_timeout(int timeout_count)
 {
 	char *null_pointer = NULL;
 
-	pr_info("Suspend monitor timeout (timer is %d seconds)\n",
+	pr_debug("Suspend monitor timeout (timer is %d seconds)\n",
 		(SUSPEND_TIMER_TIMEOUT_MS/1000));
 
 	show_state_filter(TASK_UNINTERRUPTIBLE);
@@ -116,7 +116,7 @@ static void suspend_timeout(int timeout_count)
 	if (is_console_suspended())
 		resume_console();
 
-	pr_info("Trigger a panic\n");
+	pr_debug("Trigger a panic\n");
 
 	/* Trigger a NULL pointer dereference */
 	*null_pointer = 'a';
@@ -133,7 +133,7 @@ static int suspend_monitor_kthread(void *arg)
 	static int timeout_count;
 	static long timeout;
 
-	pr_info("Init ksuspend_mon thread\n");
+	pr_debug("Init ksuspend_mon thread\n");
 
 	sched_setscheduler(current, SCHED_FIFO, &param);
 
@@ -170,7 +170,7 @@ static int suspend_monitor_kthread(void *arg)
 			timeout_count++;
 			suspend_timeout(timeout_count);
 		} else if (err == -ERESTARTSYS) {
-			pr_info("Exit ksuspend_mon!");
+			pr_debug("Exit ksuspend_mon!");
 			break;
 		}
 	} while (1);
@@ -472,7 +472,7 @@ static int suspend_test(int level)
 {
 #ifdef CONFIG_PM_DEBUG
 	if (pm_test_level == level) {
-		pr_info("suspend debug: Waiting for %d second(s).\n",
+		pr_debug("suspend debug: Waiting for %d second(s).\n",
 				pm_test_delay);
 		mdelay(pm_test_delay * 1000);
 		return 1;
@@ -730,9 +730,9 @@ static int enter_state(suspend_state_t state)
 
 #ifndef CONFIG_SUSPEND_SKIP_SYNC
 	trace_suspend_resume(TPS("sync_filesystems"), 0, true);
-	pr_info("Syncing filesystems ... ");
+	pr_debug("Syncing filesystems ... ");
 	sys_sync();
-	pr_cont("done.\n");
+	pr_debug("done.\n");
 	trace_suspend_resume(TPS("sync_filesystems"), 0, false);
 #endif
 

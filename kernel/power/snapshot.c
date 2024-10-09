@@ -1159,7 +1159,7 @@ void clear_free_pages(void)
 		pfn = memory_bm_next_pfn(bm);
 	}
 	memory_bm_position_reset(bm);
-	pr_info("PM: free pages cleared after restore\n");
+	pr_debug("PM: free pages cleared after restore\n");
 #endif /* PAGE_POISONING_ZERO */
 }
 

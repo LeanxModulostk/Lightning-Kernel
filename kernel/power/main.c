@@ -512,13 +512,13 @@ static bool pm_hang_enabled;
 static int pm_notify_test(struct notifier_block *nb,
 			     unsigned long mode, void *_unused)
 {
-	pr_info("Jump into infinite loop now\n");
+	pr_debug("Jump into infinite loop now\n");
 
 	/* Suspend thread stuck at a loop forever */
 	for(;;)
 		;
 
-	pr_info("Fail to stuck at loop\n");
+	pr_debug("Fail to stuck at loop\n");
 
 	return 0;
 }
