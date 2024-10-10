@@ -1,5 +1,5 @@
 /* Copyright (c) 2008-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -21,6 +21,7 @@
 #include <linux/uaccess.h>
 #include <linux/interrupt.h>
 #include <linux/workqueue.h>
+#include <linux/delay.h>
 #include <linux/dma-buf.h>
 #include <linux/pm_runtime.h>
 #include <linux/rbtree.h>
@@ -262,15 +263,6 @@ int kgsl_readtimestamp(struct kgsl_device *device, void *priv,
 }
 EXPORT_SYMBOL(kgsl_readtimestamp);
 
-/* Scheduled by kgsl_mem_entry_put_deferred() */
-static void _deferred_put(struct work_struct *work)
-{
-	struct kgsl_mem_entry *entry =
-		container_of(work, struct kgsl_mem_entry, work);
-
-	kgsl_mem_entry_put(entry);
-}
-
 static inline struct kgsl_mem_entry *
 kgsl_mem_entry_create(void)
 {
@@ -346,6 +338,9 @@ static void kgsl_destroy_ion(struct kgsl_memdesc *memdesc)
 				struct kgsl_mem_entry, memdesc);
 	struct kgsl_dma_buf_meta *meta = entry->priv_data;
 
+	if (memdesc->priv & KGSL_MEMDESC_MAPPED)
+		return;
+
 	if (meta != NULL) {
 		remove_dmabuf_list(meta);
 		dma_buf_unmap_attachment(meta->attach, meta->table,
@@ -373,6 +368,9 @@ static void kgsl_destroy_anon(struct kgsl_memdesc *memdesc)
 	int i = 0, j;
 	struct scatterlist *sg;
 	struct page *page;
+
+	if (memdesc->priv & KGSL_MEMDESC_MAPPED)
+		return;
 
 	for_each_sg(memdesc->sgt->sgl, sg, memdesc->sgt->nents, i) {
 		page = sg_page(sg);
@@ -445,6 +443,25 @@ static int kgsl_mem_entry_track_gpuaddr(struct kgsl_device *device,
 
 	return kgsl_mmu_get_gpuaddr(pagetable, &entry->memdesc);
 }
+
+/* Scheduled by kgsl_mem_entry_destroy_deferred() */
+static void _deferred_destroy(struct work_struct *work)
+{
+	struct kgsl_mem_entry *entry =
+		container_of(work, struct kgsl_mem_entry, work);
+
+	kgsl_mem_entry_destroy(&entry->refcount);
+}
+
+void kgsl_mem_entry_destroy_deferred(struct kref *kref)
+{
+	struct kgsl_mem_entry *entry =
+		container_of(kref, struct kgsl_mem_entry, refcount);
+
+	INIT_WORK(&entry->work, _deferred_destroy);
+	queue_work(kgsl_driver.mem_workqueue, &entry->work);
+}
+
 
 /* Commit the entry to the process so it can be accessed by other operations */
 static void kgsl_mem_entry_commit_process(struct kgsl_mem_entry *entry)
@@ -542,6 +559,52 @@ static void kgsl_mem_entry_detach_process(struct kgsl_mem_entry *entry)
 	entry->priv = NULL;
 }
 
+#ifdef CONFIG_QCOM_KGSL_CONTEXT_DEBUG
+static void kgsl_context_debug_info(struct kgsl_device *device)
+{
+	struct kgsl_context *context;
+	struct kgsl_process_private *p;
+	int next;
+	/*
+	 * Keep an interval between consecutive logging to avoid
+	 * flooding the kernel log
+	 */
+	static DEFINE_RATELIMIT_STATE(_rs, 10 * HZ, 1);
+
+	if (!__ratelimit(&_rs))
+		return;
+
+	dev_info(device->dev, "KGSL active contexts:\n");
+	dev_info(device->dev, "pid      process         total    attached   detached\n");
+
+	read_lock(&kgsl_driver.proclist_lock);
+	read_lock(&device->context_lock);
+
+	list_for_each_entry(p, &kgsl_driver.process_list, list) {
+		int total_contexts = 0, num_detached = 0;
+
+		idr_for_each_entry(&device->context_idr, context, next) {
+			if (context->proc_priv == p) {
+				total_contexts++;
+				if (kgsl_context_detached(context))
+					num_detached++;
+			}
+		}
+
+		dev_info(device->dev, "%-8u %-15.15s %-8d %-10d %-10d\n",
+				pid_nr(p->pid), p->comm, total_contexts,
+				total_contexts - num_detached, num_detached);
+	}
+
+	read_unlock(&device->context_lock);
+	read_unlock(&kgsl_driver.proclist_lock);
+}
+#else
+static void kgsl_context_debug_info(struct kgsl_device *device)
+{
+}
+#endif
+
 /**
  * kgsl_context_dump() - dump information about a draw context
  * @device: KGSL device that owns the context
@@ -616,6 +679,7 @@ int kgsl_context_init(struct kgsl_device_private *dev_priv,
 			"Per process context limit reached for pid %u",
 			pid_nr(dev_priv->process_priv->pid));
 		spin_unlock(&proc_priv->ctxt_count_lock);
+		kgsl_context_debug_info(device);
 		return -ENOSPC;
 	}
 
@@ -635,10 +699,12 @@ int kgsl_context_init(struct kgsl_device_private *dev_priv,
 	}
 
 	if (id < 0) {
-		if (id == -ENOSPC)
+		if (id == -ENOSPC) {
 			KGSL_DRV_INFO(device,
 				"cannot have more than %zu contexts due to memstore limitation\n",
 				KGSL_MEMSTORE_MAX);
+			kgsl_context_debug_info(device);
+		}
 		atomic_dec(&proc_priv->ctxt_count);
 		return id;
 	}
@@ -1002,7 +1068,7 @@ struct kgsl_process_private *kgsl_process_private_find(pid_t pid)
 {
 	struct kgsl_process_private *p, *private = NULL;
 
-	spin_lock(&kgsl_driver.proclist_lock);
+	read_lock(&kgsl_driver.proclist_lock);
 	list_for_each_entry(p, &kgsl_driver.process_list, list) {
 		if (pid_nr(p->pid) == pid) {
 			if (kgsl_process_private_get(p))
@@ -1010,7 +1076,8 @@ struct kgsl_process_private *kgsl_process_private_find(pid_t pid)
 			break;
 		}
 	}
-	spin_unlock(&kgsl_driver.proclist_lock);
+	read_unlock(&kgsl_driver.proclist_lock);
+
 	return private;
 }
 
@@ -1023,9 +1090,15 @@ static struct kgsl_process_private *kgsl_process_private_new(
 	/* Search in the process list */
 	list_for_each_entry(private, &kgsl_driver.process_list, list) {
 		if (private->pid == cur_pid) {
-			if (!kgsl_process_private_get(private)) {
-				private = ERR_PTR(-EINVAL);
-			}
+			if (!kgsl_process_private_get(private))
+				/*
+				 * This will happen only if refcount is zero
+				 * i.e. destroy is triggered but didn't complete
+				 * yet. Return -EEXIST to indicate caller that
+				 * destroy is pending to allow caller to take
+				 * appropriate action.
+				 */
+				private = ERR_PTR(-EEXIST);
 			/*
 			 * We need to hold only one reference to the PID for
 			 * each process struct to avoid overflowing the
@@ -1117,35 +1190,29 @@ static void kgsl_process_private_close(struct kgsl_device_private *dev_priv,
 	 * directories and garbage collect any outstanding resources
 	 */
 
-	kgsl_process_uninit_sysfs(private);
+	process_release_memory(private);
 
 	/* Release all syncsource objects from process private */
 	kgsl_syncsource_process_release_syncsources(private);
+
+	debugfs_remove_recursive(private->debug_root);
+	kgsl_process_uninit_sysfs(private);
 
 	/* When using global pagetables, do not detach global pagetable */
 	if (private->pagetable->name != KGSL_MMU_GLOBAL_PT)
 		kgsl_mmu_detach_pagetable(private->pagetable);
 
 	/* Remove the process struct from the master list */
-	spin_lock(&kgsl_driver.proclist_lock);
+	write_lock(&kgsl_driver.proclist_lock);
 	list_del(&private->list);
-	spin_unlock(&kgsl_driver.proclist_lock);
+	write_unlock(&kgsl_driver.proclist_lock);
 
-	/*
-	 * Unlock the mutex before releasing the memory and the debugfs
-	 * nodes - this prevents deadlocks with the IOMMU and debugfs
-	 * locks.
-	 */
 	mutex_unlock(&kgsl_driver.process_mutex);
-
-	process_release_memory(private);
-	debugfs_remove_recursive(private->debug_root);
 
 	kgsl_process_private_put(private);
 }
 
-
-static struct kgsl_process_private *kgsl_process_private_open(
+static struct kgsl_process_private *_process_private_open(
 		struct kgsl_device *device)
 {
 	struct kgsl_process_private *private;
@@ -1165,13 +1232,34 @@ static struct kgsl_process_private *kgsl_process_private_open(
 		kgsl_process_init_sysfs(device, private);
 		kgsl_process_init_debugfs(private);
 
-		spin_lock(&kgsl_driver.proclist_lock);
+		write_lock(&kgsl_driver.proclist_lock);
 		list_add(&private->list, &kgsl_driver.process_list);
-		spin_unlock(&kgsl_driver.proclist_lock);
+		write_unlock(&kgsl_driver.proclist_lock);
 	}
 
 done:
 	mutex_unlock(&kgsl_driver.process_mutex);
+	return private;
+}
+
+static struct kgsl_process_private *kgsl_process_private_open(
+		struct kgsl_device *device)
+{
+	struct kgsl_process_private *private;
+	int i;
+
+	private = _process_private_open(device);
+
+	/*
+	 * If we get error and error is -EEXIST that means previous process
+	 * private destroy is triggered but didn't complete. Retry creating
+	 * process private after sometime to allow previous destroy to complete.
+	 */
+	for (i = 0; (PTR_ERR_OR_ZERO(private) == -EEXIST) && (i < 5); i++) {
+		usleep_range(10, 100);
+		private = _process_private_open(device);
+	}
+
 	return private;
 }
 
@@ -1180,8 +1268,7 @@ static int kgsl_close_device(struct kgsl_device *device)
 	int result = 0;
 
 	mutex_lock(&device->mutex);
-	device->open_count--;
-	if (device->open_count == 0) {
+	if (device->open_count == 1) {
 
 		/* Wait for the active count to go to 0 */
 		kgsl_active_count_wait(device, 0);
@@ -1191,6 +1278,18 @@ static int kgsl_close_device(struct kgsl_device *device)
 
 		result = kgsl_pwrctrl_change_state(device, KGSL_STATE_INIT);
 	}
+
+	/*
+	 * We must decrement the open_count after last_close() has finished.
+	 * This is because last_close() relinquishes device mutex while
+	 * waiting for active count to become 0. This opens up a window
+	 * where a new process can come in, see that open_count is 0, and
+	 * initiate a first_open(). This can potentially mess up the power
+	 * state machine. To avoid a first_open() from happening before
+	 * last_close() has finished, decrement the open_count after
+	 * last_close().
+	 */
+	device->open_count--;
 	mutex_unlock(&device->mutex);
 	return result;
 
@@ -1371,7 +1470,9 @@ kgsl_sharedmem_find(struct kgsl_process_private *private, uint64_t gpuaddr)
 	if (!private)
 		return NULL;
 
-	if (!kgsl_mmu_gpuaddr_in_range(private->pagetable, gpuaddr, 0))
+	if (!kgsl_mmu_gpuaddr_in_range(private->pagetable, gpuaddr, 0) &&
+		!kgsl_mmu_gpuaddr_in_range(
+			private->pagetable->mmu->securepagetable, gpuaddr, 0))
 		return NULL;
 
 	spin_lock(&private->mem_lock);
@@ -2093,7 +2194,7 @@ static void gpumem_free_func(struct kgsl_device *device,
 			entry->memdesc.gpuaddr, entry->memdesc.size,
 			entry->memdesc.flags);
 
-	kgsl_mem_entry_put(entry);
+	kgsl_mem_entry_put_deferred(entry);
 }
 
 static long gpumem_free_entry_on_timestamp(struct kgsl_device *device,
@@ -2193,8 +2294,7 @@ static bool gpuobj_free_fence_func(void *priv)
 			entry->memdesc.gpuaddr, entry->memdesc.size,
 			entry->memdesc.flags);
 
-	INIT_WORK(&entry->work, _deferred_put);
-	queue_work(kgsl_driver.mem_workqueue, &entry->work);
+	kgsl_mem_entry_put_deferred(entry);
 	return true;
 }
 
@@ -2426,6 +2526,14 @@ static int kgsl_setup_anon_useraddr(struct kgsl_pagetable *pagetable,
 
 	ret = memdesc_sg_virt(&entry->memdesc, hostptr);
 
+	/* if OOM, retry once after flushing mem_workqueue */
+	if (ret == -ENOMEM) {
+		flush_workqueue(kgsl_driver.mem_workqueue);
+		ret = kgsl_mmu_set_svm_region(pagetable,
+			(uint64_t) hostptr, (uint64_t) size);
+	}
+
+
 	if (ret && kgsl_memdesc_use_cpu_map(&entry->memdesc))
 		kgsl_mmu_put_gpuaddr(&entry->memdesc);
 
@@ -2433,6 +2541,15 @@ static int kgsl_setup_anon_useraddr(struct kgsl_pagetable *pagetable,
 }
 
 #ifdef CONFIG_DMA_SHARED_BUFFER
+static int match_file(const void *p, struct file *file, unsigned int fd)
+{
+	/*
+	 * We must return fd + 1 because iterate_fd stops searching on
+	 * non-zero return, but 0 is a valid fd.
+	 */
+	return (p == file) ? (fd + 1) : 0;
+}
+
 static void _setup_cache_mode(struct kgsl_mem_entry *entry,
 		struct vm_area_struct *vma)
 {
@@ -2470,6 +2587,8 @@ static int kgsl_setup_dmabuf_useraddr(struct kgsl_device *device,
 	vma = find_vma(current->mm, hostptr);
 
 	if (vma && vma->vm_file) {
+		int fd;
+
 		ret = check_vma_flags(vma, entry->memdesc.flags);
 		if (ret) {
 			up_read(&current->mm->mmap_sem);
@@ -2485,13 +2604,27 @@ static int kgsl_setup_dmabuf_useraddr(struct kgsl_device *device,
 			return -EFAULT;
 		}
 
-		/*
-		 * Take a refcount because dma_buf_put() decrements the
-		 * refcount
-		 */
-		get_file(vma->vm_file);
-
-		dmabuf = vma->vm_file->private_data;
+		/* Look for the fd that matches this vma file */
+		fd = iterate_fd(current->files, 0, match_file, vma->vm_file);
+		if (fd) {
+			dmabuf = dma_buf_get(fd - 1);
+			if (IS_ERR(dmabuf)) {
+				up_read(&current->mm->mmap_sem);
+				return PTR_ERR(dmabuf);
+			}
+			/*
+			 * It is possible that the fd obtained from iterate_fd
+			 * was closed before passing the fd to dma_buf_get().
+			 * Hence dmabuf returned by dma_buf_get() could be
+			 * different from vma->vm_file->private_data. Return
+			 * failure if this happens.
+			 */
+			if (dmabuf != vma->vm_file->private_data) {
+				dma_buf_put(dmabuf);
+				up_read(&current->mm->mmap_sem);
+				return -EBADF;
+			}
+		}
 	}
 
 	if (IS_ERR_OR_NULL(dmabuf)) {
@@ -4737,6 +4870,11 @@ kgsl_get_unmapped_area(struct file *file, unsigned long addr,
 				pgoff, len, (int) val);
 	} else {
 		val = _get_svm_area(private, entry, addr, len, flags);
+		/* if OOM, retry once after flushing mem_workqueue */
+		if (val == -ENOMEM) {
+			flush_workqueue(kgsl_driver.mem_workqueue);
+			val = _get_svm_area(private, entry, addr, len, flags);
+		}
 		if (IS_ERR_VALUE(val))
 			KGSL_DRV_ERR_RATELIMIT(device,
 				"_get_svm_area: pid %d mmap_base %lx addr %lx pgoff %lx len %ld failed error %d\n",
@@ -4758,6 +4896,7 @@ static int kgsl_mmap(struct file *file, struct vm_area_struct *vma)
 	struct kgsl_process_private *private = dev_priv->process_priv;
 	struct kgsl_mem_entry *entry = NULL;
 	struct kgsl_device *device = dev_priv->device;
+	uint64_t flags;
 
 	/* Handle leagacy behavior for memstore */
 
@@ -4802,8 +4941,11 @@ static int kgsl_mmap(struct file *file, struct vm_area_struct *vma)
 
 	vma->vm_ops = &kgsl_gpumem_vm_ops;
 
-	if (cache == KGSL_CACHEMODE_WRITEBACK
-		|| cache == KGSL_CACHEMODE_WRITETHROUGH) {
+	flags = entry->memdesc.flags;
+
+	if (!(flags & KGSL_MEMFLAGS_IOCOHERENT) &&
+	    (cache == KGSL_CACHEMODE_WRITEBACK ||
+	     cache == KGSL_CACHEMODE_WRITETHROUGH)) {
 		int i;
 		unsigned long addr = vma->vm_start;
 		struct kgsl_memdesc *m = &entry->memdesc;
@@ -4821,6 +4963,15 @@ static int kgsl_mmap(struct file *file, struct vm_area_struct *vma)
 	if (atomic_inc_return(&entry->map_count) == 1)
 		atomic64_add(entry->memdesc.size,
 				&entry->priv->gpumem_mapped);
+
+	/*
+	 * kgsl gets the entry id or the gpu address through vm_pgoff.
+	 * It is used during mmap and never needed again. But this vm_pgoff
+	 * has different meaning at other parts of kernel. Not setting to
+	 * zero will let way for wrong assumption when tried to unmap a page
+	 * from this vma.
+	 */
+	vma->vm_pgoff = 0;
 
 	trace_kgsl_mem_mmap(entry, vma->vm_start);
 	return 0;
@@ -4856,7 +5007,7 @@ static const struct file_operations kgsl_fops = {
 
 struct kgsl_driver kgsl_driver  = {
 	.process_mutex = __MUTEX_INITIALIZER(kgsl_driver.process_mutex),
-	.proclist_lock = __SPIN_LOCK_UNLOCKED(kgsl_driver.proclist_lock),
+	.proclist_lock = __RW_LOCK_UNLOCKED(kgsl_driver.proclist_lock),
 	.ptlock = __SPIN_LOCK_UNLOCKED(kgsl_driver.ptlock),
 	.devlock = __MUTEX_INITIALIZER(kgsl_driver.devlock),
 	/*
