@@ -25,6 +25,8 @@
 #define NUM_LNODES	3
 #define MAX_STR_CL	50
 
+#define DEBUG_REC_TRANSACTION 0
+
 struct bus_search_type {
 	struct list_head link;
 	struct list_head node_list;
@@ -1162,7 +1164,7 @@ static int update_context(uint32_t cl, bool active_only,
 	msm_bus_dbg_client_data(client->pdata, ctx_idx, cl);
 	ret = update_client_paths(client, false, ctx_idx);
 	if (ret) {
-		pr_err("%s: Err updating path\n", __func__);
+		pr_debug("%s: Err updating path\n", __func__);
 		goto exit_update_context;
 	}
 
@@ -1225,7 +1227,7 @@ static int update_request_adhoc(uint32_t cl, unsigned int index)
 	msm_bus_dbg_client_data(client->pdata, index, cl);
 	ret = update_client_paths(client, log_transaction, index);
 	if (ret) {
-		pr_err("%s: Err updating path\n", __func__);
+		pr_debug("%s: Err updating path\n", __func__);
 		goto exit_update_request;
 	}
 
@@ -1263,7 +1265,8 @@ static int update_bw_adhoc(struct msm_bus_client_handle *cl, u64 ab, u64 ib)
 	if (!strcmp(test_cl, cl->name))
 		log_transaction = true;
 
-	msm_bus_dbg_rec_transaction(cl, ab, ib);
+	if (DEBUG_REC_TRANSACTION)
+		msm_bus_dbg_rec_transaction(cl, ab, ib);
 
 	if ((cl->cur_act_ib == ib) && (cl->cur_act_ab == ab)) {
 		MSM_BUS_DBG("%s:no change in request", cl->name);
@@ -1324,7 +1327,9 @@ static int update_bw_context(struct msm_bus_client_handle *cl, u64 act_ab,
 
 	if (!slp_ab && !slp_ib)
 		cl->active_only = true;
-	msm_bus_dbg_rec_transaction(cl, cl->cur_act_ab, cl->cur_dual_ib);
+	if (DEBUG_REC_TRANSACTION)
+		msm_bus_dbg_rec_transaction(cl, cl->cur_act_ab,
+					    cl->cur_dual_ib);
 	ret = update_path(cl->mas_dev, cl->slv, act_ib, act_ab, slp_ib,
 				slp_ab, cl->cur_act_ab, cl->cur_act_ab,
 				cl->first_hop, cl->active_only);
@@ -1374,7 +1379,7 @@ register_adhoc(uint32_t mas, uint32_t slv, char *name, bool active_only)
 	rt_mutex_lock(&msm_bus_adhoc_lock);
 
 	if (!(mas && slv && name)) {
-		pr_err("%s: Error: src dst name num_paths are required",
+		pr_debug("%s: Error: src dst name num_paths are required",
 								 __func__);
 		goto exit_register;
 	}
