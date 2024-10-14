@@ -221,13 +221,13 @@ extern void enable_irq(unsigned int irq);
 extern void enable_percpu_irq(unsigned int irq, unsigned int type);
 extern bool irq_percpu_is_enabled(unsigned int irq);
 extern void irq_wake_thread(unsigned int irq, void *dev_id);
-extern void irq_set_perf_affinity(unsigned int irq);
+extern void irq_set_perf_affinity(unsigned int irq, unsigned int perf_flag);
 
 /* The following three functions are for the core kernel use only. */
 extern void suspend_device_irqs(void);
 extern void resume_device_irqs(void);
 extern void unaffine_perf_irqs(void);
-extern void reaffine_perf_irqs(void);
+extern void reaffine_perf_irqs(bool from_hotplug);
 
 /**
  * struct irq_affinity_notify - context for notification of IRQ affinity changes
