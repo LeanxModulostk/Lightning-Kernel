@@ -206,14 +206,13 @@ void irq_migrate_all_off_this_cpu(void)
 		raw_spin_lock(&desc->lock);
 		affinity_broken = migrate_one_irq(desc);
 		raw_spin_unlock(&desc->lock);
-		if (cpumask_intersects(cpumask_of(smp_processor_id()), cpu_perf_mask))
-			reaffine_perf_irqs();
 
 		if (affinity_broken) {
-			pr_debug_ratelimited("IRQ %u: no longer affine to CPU%u\n",
+			pr_info_ratelimited("IRQ %u: no longer affine to CPU%u\n",
 					    irq, smp_processor_id());
 		}
 	}
+
 	if (!cpumask_test_cpu(smp_processor_id(), cpu_lp_mask))
 		reaffine_perf_irqs(true);
 }
@@ -259,11 +258,9 @@ int irq_affinity_online_cpu(unsigned int cpu)
 		raw_spin_lock_irq(&desc->lock);
 		irq_restore_affinity_of_irq(desc, cpu);
 		raw_spin_unlock_irq(&desc->lock);
-		if (cpumask_intersects(cpumask_of(cpu), cpu_perf_mask))
-			reaffine_perf_irqs();
 	}
 	irq_unlock_sparse();
-	
+
 	if (!cpumask_test_cpu(cpu, cpu_lp_mask))
 		reaffine_perf_irqs(true);
 
