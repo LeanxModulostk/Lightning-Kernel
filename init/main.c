@@ -89,6 +89,7 @@
 #include <linux/cache.h>
 #include <linux/rodata_test.h>
 #include <linux/jump_label.h>
+#include <linux/stackdepot.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -528,6 +529,7 @@ static void __init mm_init(void)
 	 */
 	page_ext_init_flatmem();
 	report_meminit();
+	stack_depot_init();
 	mem_init();
 	kmem_cache_init();
 	pgtable_init();
