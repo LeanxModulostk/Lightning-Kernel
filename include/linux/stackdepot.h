@@ -29,4 +29,13 @@ depot_stack_handle_t depot_save_stack(struct stack_trace *trace, gfp_t flags);
 
 void depot_fetch_stack(depot_stack_handle_t handle, struct stack_trace *trace);
 
+#ifdef CONFIG_STACKDEPOT
+int stack_depot_init(void);
+#else
+static inline int stack_depot_init(void)
+{
+	return 0;
+}
+#endif	/* CONFIG_STACKDEPOT */
+
 #endif
