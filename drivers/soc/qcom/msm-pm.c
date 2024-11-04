@@ -51,7 +51,7 @@
 
 #define MAX_BUF_SIZE  1024
 
-static int msm_pm_debug_mask = 1;
+static int msm_pm_debug_mask = 0;
 module_param_named(
 	debug_mask, msm_pm_debug_mask, int, 0664
 );
@@ -151,7 +151,7 @@ static bool msm_pm_retention(bool from_idle)
 
 	if (!msm_pm_ret_no_pll_switch)
 		if (clk_enable(cpu_clk))
-			pr_err("%s(): Error restore cpu clk\n", __func__);
+			pr_debug("%s(): Error restore cpu clk\n", __func__);
 
 	spin_lock(&retention_lock);
 	cpumask_clear_cpu(cpu, &retention_cpus);
@@ -271,7 +271,7 @@ static bool __ref msm_pm_spm_power_collapse(
 	bool save_cpu_regs = (cpu_online(cpu) || from_idle);
 
 	if (MSM_PM_DEBUG_POWER_COLLAPSE & msm_pm_debug_mask)
-		pr_info("CPU%u: %s: notify_rpm %d\n",
+		pr_debug("CPU%u: %s: notify_rpm %d\n",
 			cpu, __func__, (int) notify_rpm);
 
 	ret = msm_spm_set_low_power_mode(mode, notify_rpm);
@@ -282,7 +282,7 @@ static bool __ref msm_pm_spm_power_collapse(
 	msm_pm_boot_config_before_pc(cpu, virt_to_phys(entry));
 
 	if (MSM_PM_DEBUG_RESET_VECTOR & msm_pm_debug_mask)
-		pr_info("CPU%u: %s: program vector to %pK\n",
+		pr_debug("CPU%u: %s: program vector to %pK\n",
 			cpu, __func__, entry);
 
 	msm_jtag_save_state();
@@ -298,7 +298,7 @@ static bool __ref msm_pm_spm_power_collapse(
 	msm_pm_boot_config_after_pc(cpu);
 
 	if (MSM_PM_DEBUG_POWER_COLLAPSE & msm_pm_debug_mask)
-		pr_info("CPU%u: %s: msm_pm_collapse returned, collapsed %d\n",
+		pr_debug("CPU%u: %s: msm_pm_collapse returned, collapsed %d\n",
 			cpu, __func__, collapsed);
 
 	ret = msm_spm_set_low_power_mode(MSM_SPM_MODE_CLOCK_GATING, false);
@@ -336,7 +336,7 @@ static int ramp_up_first_cpu(int cpu, int saved_rate)
 	int rc = 0;
 
 	if (MSM_PM_DEBUG_CLOCK & msm_pm_debug_mask)
-		pr_info("CPU%u: %s: restore clock rate\n",
+		pr_debug("CPU%u: %s: restore clock rate\n",
 				cpu, __func__);
 
 	clk_enable(l2_clk);
@@ -345,7 +345,7 @@ static int ramp_up_first_cpu(int cpu, int saved_rate)
 		int ret = clk_enable(cpu_clk);
 
 		if (ret) {
-			pr_err("%s(): Error restoring cpu clk\n",
+			pr_debug("%s(): Error restoring cpu clk\n",
 					__func__);
 			return ret;
 		}
@@ -361,11 +361,11 @@ static bool msm_pm_power_collapse(bool from_idle)
 	bool collapsed;
 
 	if (MSM_PM_DEBUG_POWER_COLLAPSE & msm_pm_debug_mask)
-		pr_info("CPU%u: %s: idle %d\n",
+		pr_debug("CPU%u: %s: idle %d\n",
 			cpu, __func__, (int)from_idle);
 
 	if (MSM_PM_DEBUG_POWER_COLLAPSE & msm_pm_debug_mask)
-		pr_info("CPU%u: %s: pre power down\n", cpu, __func__);
+		pr_debug("CPU%u: %s: pre power down\n", cpu, __func__);
 
 	if (cpu_online(cpu) && !msm_no_ramp_down_pc)
 		saved_acpuclk_rate = ramp_down_last_cpu(cpu);
@@ -377,10 +377,10 @@ static bool msm_pm_power_collapse(bool from_idle)
 		ramp_up_first_cpu(cpu, saved_acpuclk_rate);
 
 	if (MSM_PM_DEBUG_POWER_COLLAPSE & msm_pm_debug_mask)
-		pr_info("CPU%u: %s: post power up\n", cpu, __func__);
+		pr_debug("CPU%u: %s: post power up\n", cpu, __func__);
 
 	if (MSM_PM_DEBUG_POWER_COLLAPSE & msm_pm_debug_mask)
-		pr_info("CPU%u: %s: return\n", cpu, __func__);
+		pr_debug("CPU%u: %s: return\n", cpu, __func__);
 	return collapsed;
 }
 /******************************************************************************
@@ -417,7 +417,7 @@ bool msm_cpu_pm_enter_sleep(enum msm_pm_sleep_mode mode, bool from_idle)
 
 	if ((!from_idle  && cpu_online(cpu))
 			|| (MSM_PM_DEBUG_IDLE & msm_pm_debug_mask))
-		pr_info("CPU%u:%s mode:%d during %s\n", cpu, __func__,
+		pr_debug("CPU%u:%s mode:%d during %s\n", cpu, __func__,
 				mode, from_idle ? "idle" : "suspend");
 
 	if (execute[mode])
@@ -530,7 +530,7 @@ static int msm_pm_snoc_client_probe(struct platform_device *pdev)
 			msm_bus_scale_register_client(msm_pm_bus_pdata);
 
 		if (!msm_pm_bus_client) {
-			pr_err("%s: Failed to register SNOC client", __func__);
+			pr_debug("%s: Failed to register SNOC client", __func__);
 			rc = -ENXIO;
 			goto snoc_cl_probe_done;
 		}
@@ -538,7 +538,7 @@ static int msm_pm_snoc_client_probe(struct platform_device *pdev)
 		rc = msm_bus_scale_client_update_request(msm_pm_bus_client, 1);
 
 		if (rc)
-			pr_err("%s: Error setting bus rate", __func__);
+			pr_debug("%s: Error setting bus rate", __func__);
 	}
 
 snoc_cl_probe_done:
@@ -578,14 +578,14 @@ static int msm_cpu_status_probe(struct platform_device *pdev)
 
 		msm_pm_slp_sts[cpu].base_addr = of_iomap(node, 0);
 		if (!msm_pm_slp_sts[cpu].base_addr) {
-			pr_err("%s: Can't find base addr\n", __func__);
+			pr_debug("%s: Can't find base addr\n", __func__);
 			return -ENODEV;
 		}
 
 		key = "qcom,sleep-status-mask";
 		rc = of_property_read_u32(node, key, &msm_pm_slp_sts[cpu].mask);
 		if (rc) {
-			pr_err("%s: Can't find %s property\n", __func__, key);
+			pr_debug("%s: Can't find %s property\n", __func__, key);
 			iounmap(msm_pm_slp_sts[cpu].base_addr);
 			return rc;
 		}
@@ -726,7 +726,7 @@ static int msm_pc_debug_counters_file_open(struct inode *inode,
 		sizeof(struct msm_pc_debug_counters_buffer), GFP_KERNEL);
 
 	if (!file->private_data) {
-		pr_err("%s: ERROR kmalloc failed to allocate %zu bytes\n",
+		pr_debug("%s: ERROR kmalloc failed to allocate %zu bytes\n",
 		__func__, sizeof(struct msm_pc_debug_counters_buffer));
 
 		ret = -ENOMEM;
@@ -789,7 +789,7 @@ static int msm_pm_clk_init(struct platform_device *pdev)
 
 	l2_clk = clk_get(&pdev->dev, "l2_clk");
 	if (IS_ERR(l2_clk))
-		pr_warn("%s: Could not get l2_clk (-%ld)\n", __func__,
+		pr_debug("%s: Could not get l2_clk (-%ld)\n", __func__,
 			PTR_ERR(l2_clk));
 
 	return 0;
@@ -815,7 +815,7 @@ static int msm_cpu_pm_probe(struct platform_device *pdev)
 				msm_pc_debug_counters,
 				&msm_pc_debug_counters_fops);
 		if (!dent)
-			pr_err("%s: ERROR debugfs_create_file failed\n",
+			pr_debug("%s: ERROR debugfs_create_file failed\n",
 					__func__);
 		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 		if (!res)
@@ -846,7 +846,7 @@ skip_save_imem:
 
 		ret = msm_pm_clk_init(pdev);
 		if (ret) {
-			pr_info("msm_pm_clk_init returned error\n");
+			pr_debug("msm_pm_clk_init returned error\n");
 			return ret;
 		}
 	}
@@ -880,7 +880,7 @@ static int __init msm_pm_drv_init(void)
 	rc = platform_driver_register(&msm_cpu_pm_snoc_client_driver);
 
 	if (rc)
-		pr_err("%s(): failed to register driver %s\n", __func__,
+		pr_debug("%s(): failed to register driver %s\n", __func__,
 				msm_cpu_pm_snoc_client_driver.driver.name);
 	return rc;
 }
@@ -893,7 +893,7 @@ static int __init msm_pm_debug_counters_init(void)
 	rc = platform_driver_register(&msm_cpu_pm_driver);
 
 	if (rc)
-		pr_err("%s(): failed to register driver %s\n", __func__,
+		pr_debug("%s(): failed to register driver %s\n", __func__,
 				msm_cpu_pm_driver.driver.name);
 	return rc;
 }
