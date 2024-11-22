@@ -1719,17 +1719,17 @@ int isolate_lru_page(struct page *page)
 	WARN_RATELIMIT(PageTail(page), "trying to isolate tail page");
 
 	if (TestClearPageLRU(page)) {
-		pg_data_t *pgdat = page_pgdat(page);
+		struct zone *zone = page_zone(page);
 		struct lruvec *lruvec;
 
 		get_page(page);
-		lruvec = mem_cgroup_page_lruvec(page, pgdat);
+		lruvec = mem_cgroup_page_lruvec(page, zone->zone_pgdat);
 		spin_lock_irq(zone_lru_lock(zone));
 		del_page_from_lru_list(page, lruvec);
-		spin_unlock_irq(&pgdat->lru_lock);
+		spin_unlock_irq(zone_lru_lock(zone));
 		ret = 0;
 	}
-	
+
 	return ret;
 }
 
