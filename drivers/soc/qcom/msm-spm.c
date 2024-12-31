@@ -367,7 +367,9 @@ void msm_spm_drv_flush_seq_entry(struct msm_spm_driver_data *dev)
 	int num_spm_entry = msm_spm_drv_get_num_spm_entry(dev);
 
 	if (!dev) {
+#ifdef CONFIG_BUG
 		__WARN();
+#endif
 		return;
 	}
 
@@ -384,11 +386,11 @@ void dump_regs(struct msm_spm_driver_data *dev, int cpu)
 {
 	msm_spm_drv_load_shadow(dev, MSM_SPM_REG_SAW_SPM_STS);
 	mb(); /* Ensure we flush */
-	pr_err("CPU%d: spm register MSM_SPM_REG_SAW_SPM_STS: 0x%x\n", cpu,
+	pr_debug("CPU%d: spm register MSM_SPM_REG_SAW_SPM_STS: 0x%x\n", cpu,
 			dev->reg_shadow[MSM_SPM_REG_SAW_SPM_STS]);
 	msm_spm_drv_load_shadow(dev, MSM_SPM_REG_SAW_SPM_CTL);
 	mb(); /* Ensure we flush */
-	pr_err("CPU%d: spm register MSM_SPM_REG_SAW_SPM_CTL: 0x%x\n", cpu,
+	pr_debug("CPU%d: spm register MSM_SPM_REG_SAW_SPM_CTL: 0x%x\n", cpu,
 			dev->reg_shadow[MSM_SPM_REG_SAW_SPM_CTL]);
 }
 
@@ -443,7 +445,7 @@ int msm_spm_drv_set_low_power_mode(struct msm_spm_driver_data *dev,
 		int i;
 
 		for (i = 0; i < MSM_SPM_REG_NR; i++)
-			pr_info("%s: reg %02x = 0x%08x\n", __func__,
+			pr_debug("%s: reg %02x = 0x%08x\n", __func__,
 				dev->reg_offsets[i], dev->reg_shadow[i]);
 	}
 	msm_spm_drv_load_shadow(dev, MSM_SPM_REG_SAW_SPM_STS);
@@ -527,12 +529,12 @@ static inline int msm_spm_drv_validate_data(struct msm_spm_driver_data *dev,
 	} while (--timeout_us);
 
 	if (!timeout_us) {
-		pr_err("Wrong level %#x\n", new_level);
+		pr_debug("Wrong level %#x\n", new_level);
 		return -EIO;
 	}
 
 	if (msm_spm_debug_mask & MSM_SPM_DEBUG_VCTL)
-		pr_info("%s: done, remaining timeout %u us\n",
+		pr_debug("%s: done, remaining timeout %u us\n",
 			__func__, timeout_us);
 
 	return 0;
@@ -553,7 +555,7 @@ int msm_spm_drv_set_vdd(struct msm_spm_driver_data *dev, unsigned int vlevel)
 		return -ENODEV;
 
 	if (msm_spm_debug_mask & MSM_SPM_DEBUG_VCTL)
-		pr_info("%s: requesting vlevel %#x\n", __func__, vlevel);
+		pr_debug("%s: requesting vlevel %#x\n", __func__, vlevel);
 
 	if (avs_enabled)
 		msm_spm_drv_disable_avs(dev);
@@ -613,7 +615,7 @@ set_vdd_bail:
 	if (avs_enabled)
 		msm_spm_drv_enable_avs(dev);
 
-	pr_err("%s: failed %#x vlevel setting in timeout %uus\n",
+	pr_debug("%s: failed %#x vlevel setting in timeout %uus\n",
 			__func__, vlevel_set, dev->vctl_timeout_us);
 	return -EIO;
 }
@@ -678,7 +680,7 @@ int msm_spm_drv_set_pmic_data(struct msm_spm_driver_data *dev,
 	} while (--timeout_us);
 
 	if (!timeout_us) {
-		pr_err("%s: failed, remaining timeout %u us, data %d\n",
+		pr_debug("%s: failed, remaining timeout %u us, data %d\n",
 				__func__, timeout_us, data);
 		return -EIO;
 	}
@@ -720,7 +722,7 @@ int msm_spm_drv_reg_init(struct msm_spm_driver_data *dev,
 		}
 
 	if (!found) {
-		pr_err("%s: No SAW version found\n", __func__);
+		pr_debug("%s: No SAW version found\n", __func__);
 		WARN_ON(!found);
 	}
 	return 0;
