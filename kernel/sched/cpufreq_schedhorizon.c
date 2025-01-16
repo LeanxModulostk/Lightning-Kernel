@@ -29,7 +29,7 @@
 
 /* Define default efficient frequencies for big and LITTLE cores */
 static unsigned int default_efficient_freq_lp[] = {1305600};
-static unsigned int default_efficient_freq_perf[] = {1804800};
+static unsigned int default_efficient_freq_perf[] = {1536000};
 
 /* Define default up delays for big and LITTLE cores */
 static unsigned int default_up_delay_lp[] = {90};
