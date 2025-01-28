@@ -28,12 +28,12 @@
 #define SUGOV_KTHREAD_PRIORITY	50
 
 /* Define default efficient frequencies for big and LITTLE cores */
-static unsigned int default_efficient_freq_lp[] = {0};
-static unsigned int default_efficient_freq_perf[] = {0};
+static unsigned int default_efficient_freq_lp[] = {1305600};
+static unsigned int default_efficient_freq_perf[] = {1536000};
 
 /* Define default up delays for big and LITTLE cores */
-static unsigned int default_up_delay_lp[] = {0};
-static unsigned int default_up_delay_perf[] = {0};
+static unsigned int default_up_delay_lp[] = {90};
+static unsigned int default_up_delay_perf[] = {90};
 
 struct sugov_tunables {
 	struct gov_attr_set attr_set;
@@ -706,7 +706,7 @@ static struct sugov_policy *sugov_policy_alloc(struct cpufreq_policy *policy)
 	return sg_policy;
 }
 
-static void sugov_policy_free(struct sugov_policy *sg_policy)
+static inline void sugov_policy_free(struct sugov_policy *sg_policy)
 {
 	kfree(sg_policy);
 }
