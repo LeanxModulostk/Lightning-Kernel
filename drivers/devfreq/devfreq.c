@@ -703,7 +703,7 @@ struct devfreq *devm_devfreq_add_device(struct device *dev,
 	devfreq = devfreq_add_device(dev, profile, governor_name, data);
 	if (IS_ERR(devfreq)) {
 		devres_free(ptr);
-		return devfreq;
+		return ERR_PTR(-ENOMEM);
 	}
 
 	*ptr = devfreq;
@@ -1312,7 +1312,7 @@ static int __init devfreq_init(void)
 	}
 
 	devfreq_wq = alloc_workqueue("devfreq_wq",
-			    WQ_HIGHPRI | WQ_UNBOUND | WQ_FREEZABLE |
+			    WQ_HIGHPRI | WQ_FREEZABLE |
 			    WQ_MEM_RECLAIM, 0);
 	if (!devfreq_wq) {
 		class_destroy(devfreq_class);
