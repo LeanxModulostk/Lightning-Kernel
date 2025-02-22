@@ -153,7 +153,13 @@ ip6_finish_output_gso_slowpath_drop(struct net *net, struct sock *sk,
 		int err;
 
 		skb_mark_not_on_list(segs);
-		err = ip6_fragment(net, sk, segs, ip6_finish_output2);
+		/* Last GSO segment can be smaller than gso_size (and MTU).
+		 * Adding a fragment header would produce an "atomic fragment",
+		 * which is considered harmful (RFC-8021). Avoid that.
+		 */
+		err = segs->len > mtu ?
+			ip6_fragment(net, sk, segs, ip6_finish_output2) :
+			ip6_finish_output2(net, sk, segs);
 		if (err && ret == 0)
 			ret = err;
 	}
@@ -504,6 +510,7 @@ int ip6_forward(struct sk_buff *skb)
 			return 0;
 	}
 
+#if 0
 	/*
 	 *	check and decrement ttl
 	 */
@@ -517,6 +524,7 @@ int ip6_forward(struct sk_buff *skb)
 		kfree_skb(skb);
 		return -ETIMEDOUT;
 	}
+#endif
 
 	/* XXX: idev->cnf.proxy_ndp? */
 	if (net->ipv6.devconf_all->proxy_ndp &&
@@ -608,7 +616,9 @@ int ip6_forward(struct sk_buff *skb)
 
 	/* Mangling hops number delayed to point after skb COW */
 
+#if 0
 	hdr->hop_limit--;
+#endif
 
 	return NF_HOOK(NFPROTO_IPV6, NF_INET_FORWARD,
 		       net, NULL, skb, skb->dev, dst->dev,

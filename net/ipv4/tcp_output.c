@@ -334,10 +334,9 @@ static void tcp_ecn_send_syn(struct sock *sk, struct sk_buff *skb)
 	bool bpf_needs_ecn = tcp_bpf_ca_needs_ecn(sk);
 	bool use_ecn = sock_net(sk)->ipv4.sysctl_tcp_ecn == 1 ||
 		tcp_ca_needs_ecn(sk) || bpf_needs_ecn;
+	const struct dst_entry *dst = __sk_dst_get(sk);
 
 	if (!use_ecn) {
-		const struct dst_entry *dst = __sk_dst_get(sk);
-
 		if (dst && dst_feature(dst, RTAX_FEATURE_ECN))
 			use_ecn = true;
 	}
@@ -349,6 +348,9 @@ static void tcp_ecn_send_syn(struct sock *sk, struct sk_buff *skb)
 		tp->ecn_flags = TCP_ECN_OK;
 		if (tcp_ca_needs_ecn(sk) || bpf_needs_ecn)
 			INET_ECN_xmit(sk);
+			
+		if (dst)
+			tcp_set_ecn_low_from_dst(sk, dst);
 	}
 }
 
@@ -1047,7 +1049,7 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 	skb_set_hash_from_sk(skb, sk);
 	refcount_add(skb->truesize, &sk->sk_wmem_alloc);
 
-	skb_set_dst_pending_confirm(skb, sk->sk_dst_pending_confirm);
+	skb_set_dst_pending_confirm(skb, READ_ONCE(sk->sk_dst_pending_confirm));
 
 	/* Build TCP header and checksum it. */
 	th = (struct tcphdr *)skb->data;
@@ -1344,13 +1346,28 @@ int tcp_fragment(struct sock *sk, struct sk_buff *skb, u32 len,
 		if (diff)
 			tcp_adjust_pcount(sk, skb, diff);
 
-		/* Set buff tx.in_flight as if buff were sent by itself. */
 		inflight_prev = TCP_SKB_CB(skb)->tx.in_flight - old_factor;
-		if (WARN_ONCE(inflight_prev < 0,
-			      "inconsistent: tx.in_flight: %u old_factor: %d",
-			      TCP_SKB_CB(skb)->tx.in_flight, old_factor))
+		if (inflight_prev < 0) {
+			WARN_ONCE(tcp_skb_tx_in_flight_is_suspicious(
+					  old_factor,
+					  TCP_SKB_CB(skb)->sacked,
+					  TCP_SKB_CB(skb)->tx.in_flight),
+				  "inconsistent: tx.in_flight: %u "
+				  "old_factor: %d mss: %u sacked: %u "
+				  "1st pcount: %d 2nd pcount: %d "
+				  "1st len: %u 2nd len: %u ",
+				  TCP_SKB_CB(skb)->tx.in_flight, old_factor,
+				  mss_now, TCP_SKB_CB(skb)->sacked,
+				  tcp_skb_pcount(skb), tcp_skb_pcount(buff),
+				  skb->len, buff->len);
 			inflight_prev = 0;
+		}
+		/* Set 1st tx.in_flight as if 1st were sent by itself: */
+		TCP_SKB_CB(skb)->tx.in_flight = inflight_prev +
+						 tcp_skb_pcount(skb);
+		/* Set 2nd tx.in_flight with new 1st and 2nd pcounts: */
 		TCP_SKB_CB(buff)->tx.in_flight = inflight_prev +
+						 tcp_skb_pcount(skb) +
 						 tcp_skb_pcount(buff);
 	}
 
@@ -2549,6 +2566,7 @@ void tcp_send_loss_probe(struct sock *sk)
 	if (WARN_ON(!skb || !tcp_skb_pcount(skb)))
 		goto rearm_timer;
 
+	tp->tlp_orig_data_app_limited = TCP_SKB_CB(skb)->tx.is_app_limited;
 	if (__tcp_retransmit_skb(sk, skb, 1))
 		goto rearm_timer;
 
@@ -2878,7 +2896,13 @@ int __tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int segs)
 	if (skb_still_in_host_queue(sk, skb))
 		return -EBUSY;
 
+start:
 	if (before(TCP_SKB_CB(skb)->seq, tp->snd_una)) {
+		if (unlikely(TCP_SKB_CB(skb)->tcp_flags & TCPHDR_SYN)) {
+			TCP_SKB_CB(skb)->tcp_flags &= ~TCPHDR_SYN;
+			TCP_SKB_CB(skb)->seq++;
+			goto start;
+		}
 		if (unlikely(before(TCP_SKB_CB(skb)->end_seq, tp->snd_una))) {
 			WARN_ON_ONCE(1);
 			return -EINVAL;
