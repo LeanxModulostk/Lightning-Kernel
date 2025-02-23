@@ -761,14 +761,14 @@ CONFIG_SCHED_BORE=n
 # CONFIG_HZ_100 is not set
 # CONFIG_HZ_250 is not set
 # CONFIG_HZ_500 is not set
-# CONFIG_HZ_300 is not set
-CONFIG_HZ=1000
-CONFIG_HZ_1000=y
+# CONFIG_HZ_1000 is not set
+CONFIG_HZ=300
+CONFIG_HZ_300=y
 CONFIG_SCHED_HRTICK=y
 CONFIG_RCU_BOOST=y
 CONFIG_RCU_BOOST_DELAY=0
 CONFIG_NULL_TTY=y
-CONFIG_CMDLINE="console=ttynull stack_depot_disable=on cgroup_disable=pressure rcutree.kthread_prio=99 nodebugmon mitigations=off cgroup.memory=nokmem loglevel=0 nohz=on initcall_debug=0 pti=off nowatchdog"
+CONFIG_CMDLINE="console=ttynull stack_depot_disable=on cgroup_disable=pressure rcutree.kthread_prio=99 nodebugmon mitigations=off cgroup.memory=nokmem,nosocket loglevel=0 nohz=on initcall_debug=0 pti=off nowatchdog transparent_hugepage=never mce=ignore_ce,dont_log_ce nosoftlockup quiet nohz_full=1,2,4-7 rcupdate.rcu_cpu_stall_suppress=1"
 CONFIG_CMDLINE_EXTEND=y
 CONFIG_PERF_EVENTS=y
 CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
@@ -789,6 +789,8 @@ CONFIG_SCHEDUTIL_UP_RATE_LIMIT_LITTLE=1250
 CONFIG_SCHEDUTIL_DOWN_RATE_LIMIT_LITTLE=750
 # CONFIG_PAGE_OWNER is not set
 # CONFIG_RAS is not set
+CONFIG_ARC_DBG=n
+CONFIG_NO_HZ_FULL=y
 
 # Logs
 CONFIG_CONSOLE_LOGLEVEL_DEFAULT=0
