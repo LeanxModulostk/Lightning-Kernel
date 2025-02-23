@@ -4242,9 +4242,6 @@ restart:
 		}
 		wake_all_kswapds(order, gfp_mask, ac);
 	}
-	
-	/* Boost DDR bus when memory is low so allocation latency doesn't get too bad */
-	devfreq_boost_kick(DEVFREQ_MSM_CPUBW);
 
 	/*
 	 * The adjusted alloc_flags might result in immediate success, so try
