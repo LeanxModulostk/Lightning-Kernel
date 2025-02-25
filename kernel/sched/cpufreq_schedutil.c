@@ -311,6 +311,10 @@ static void sugov_get_util(unsigned long *util, unsigned long *max, int cpu,
 
 	max_cap = arch_scale_cpu_capacity(NULL, cpu);
 	*max = max_cap;
+	
+#ifdef CONFIG_UCLAMP_TASK
+   	*util = uclamp_util_with(rq, *util, NULL);
+#endif	
 
 	*util = boosted_cpu_util(cpu, &loadcpu->walt_load);
 
