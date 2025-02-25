@@ -7646,7 +7646,7 @@ static inline bool task_fits_max(struct task_struct *p, int cpu)
 #elif CONFIG_UCLAMP_TASK
 			(uclamp_boosted(p) > 0 &&
 #endif
-			walt_should_kick_upmigrate(p, cpu)))
+			walt_should_kick_upmigrate(p, cpu))
 			return false;
 	} else { /* mid cap cpu */
 		if (task_boost > 1)
