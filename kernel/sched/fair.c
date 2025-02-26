@@ -8440,11 +8440,12 @@ static int find_energy_efficient_cpu(struct sched_domain *sd,
 	int placement_boost = task_boost_policy(p);
 	u64 start_t = 0;
 	int next_cpu = -1, backup_cpu = -1;
-	int start_cpu;
 #ifdef CONFIG_SCHED_TUNE
 	int boosted = (schedtune_task_boost(p) > 0 || per_task_boost(p) > 0);
+	int start_cpu = get_start_cpu(p);
 #elif CONFIG_UCLAMP_TASK
 	int boosted = (uclamp_boosted(p) > 0);
+	bool prefer_high_cap = uclamp_latency_sensitive(p);
 #endif
 
 	if (start_cpu < 0)
