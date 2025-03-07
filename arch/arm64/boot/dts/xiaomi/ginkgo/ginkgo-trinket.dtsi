@@ -41,7 +41,7 @@
 		qcom,idle-timeout = <64>;
 
 		/* size in bytes */
-		qcom,snapshot-size = <8388608>;
+		qcom,snapshot-size = <0>;
 	};
 	
 	restart@440b000 {
