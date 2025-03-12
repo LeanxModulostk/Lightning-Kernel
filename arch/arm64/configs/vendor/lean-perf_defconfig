@@ -769,7 +769,7 @@ CONFIG_SCHED_HRTICK=y
 CONFIG_RCU_BOOST=y
 # CONFIG_RCU_BOOST_DELAY is not set
 CONFIG_NULL_TTY=n
-CONFIG_CMDLINE="mute_console stack_depot_disable=on cgroup_disable=pressure rcutree.kthread_prio=99 nodebugmon mitigations=off cgroup.memory=nokmem,nosocket loglevel=0 nohz=on initcall_debug=0 pti=off nowatchdog transparent_hugepage=never mce=ignore_ce,dont_log_ce nosoftlockup quiet nohz_full=4-7 rcupdate.rcu_cpu_stall_suppress=1"
+CONFIG_CMDLINE="mute_console stack_depot_disable=on cgroup_disable=pressure rcutree.kthread_prio=99 nodebugmon mitigations=off cgroup.memory=nokmem,nosocket loglevel=0 nohz=off initcall_debug=0 pti=off nowatchdog transparent_hugepage=never mce=ignore_ce,dont_log_ce nosoftlockup quiet rcupdate.rcu_cpu_stall_suppress=1 nmi_watchdog=0 tsc=nowatchdog"
 CONFIG_CMDLINE_EXTEND=y
 CONFIG_PERF_EVENTS=y
 CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
@@ -791,7 +791,7 @@ CONFIG_SCHEDUTIL_DOWN_RATE_LIMIT_LITTLE=750
 # CONFIG_PAGE_OWNER is not set
 # CONFIG_RAS is not set
 CONFIG_ARC_DBG=n
-CONFIG_NO_HZ_FULL=y
+# CONFIG_NO_HZ_FULL is not set
 CONFIG_NL80211_TESTMODE=n
 CONFIG_SCHED_DEBUG=n
 
