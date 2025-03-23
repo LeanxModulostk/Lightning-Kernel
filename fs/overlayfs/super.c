@@ -465,7 +465,7 @@ static int ovl_parse_opt(char *opt, struct ovl_config *config)
 			break;
 
 		default:
-			pr_err("overlayfs: unrecognized mount option \"%s\" or missing value\n", p);
+			pr_debug_once("overlayfs: unrecognized mount option \"%s\" or missing value\n", p);
 			return -EINVAL;
 		}
 	}
@@ -598,21 +598,21 @@ static int ovl_mount_dir_noesc(const char *name, struct path *path)
 	int err = -EINVAL;
 
 	if (!*name) {
-		pr_err("overlayfs: empty lowerdir\n");
+		pr_debug_once("overlayfs: empty lowerdir\n");
 		goto out;
 	}
 	err = kern_path(name, LOOKUP_FOLLOW, path);
 	if (err) {
-		pr_err("overlayfs: failed to resolve '%s': %i\n", name, err);
+		pr_debug_once("overlayfs: failed to resolve '%s': %i\n", name, err);
 		goto out;
 	}
 	err = -EINVAL;
 	if (ovl_dentry_weird(path->dentry)) {
-		pr_err("overlayfs: filesystem on '%s' not supported\n", name);
+		pr_debug_once("overlayfs: filesystem on '%s' not supported\n", name);
 		goto out_put;
 	}
 	if (!d_is_dir(path->dentry)) {
-		pr_err("overlayfs: '%s' not a directory\n", name);
+		pr_debug_once("overlayfs: '%s' not a directory\n", name);
 		goto out_put;
 	}
 	return 0;
@@ -634,7 +634,7 @@ static int ovl_mount_dir(const char *name, struct path *path)
 
 		if (!err)
 			if (ovl_dentry_remote(path->dentry)) {
-				pr_err("overlayfs: filesystem on '%s' not supported as upperdir\n",
+				pr_debug_once("overlayfs: filesystem on '%s' not supported as upperdir\n",
 				       tmp);
 				path_put(path);
 				err = -EINVAL;
@@ -651,7 +651,7 @@ static int ovl_check_namelen(struct path *path, struct ovl_fs *ofs,
 	int err = vfs_statfs(path, &statfs);
 
 	if (err)
-		pr_err("overlayfs: statfs failed on '%s'\n", name);
+		pr_debug_once("overlayfs: statfs failed on '%s'\n", name);
 	else
 		ofs->namelen = max(ofs->namelen, statfs.f_namelen);
 
@@ -908,7 +908,7 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 	err = -EINVAL;
 	if (!ufs->config.lowerdir) {
 		if (!silent)
-			pr_err("overlayfs: missing 'lowerdir'\n");
+			pr_debug_once("overlayfs: missing 'lowerdir'\n");
 		goto out_free_config;
 	}
 
@@ -916,7 +916,7 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
 	if (ufs->config.upperdir) {
 		if (!ufs->config.workdir) {
-			pr_err("overlayfs: missing 'workdir'\n");
+			pr_debug_once("overlayfs: missing 'workdir'\n");
 			goto out_free_config;
 		}
 
@@ -926,7 +926,7 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 
 		/* Upper fs should not be r/o */
 		if (sb_rdonly(upperpath.mnt->mnt_sb)) {
-			pr_err("overlayfs: upper fs is r/o, try multi-lower layers mount\n");
+			pr_debug_once("overlayfs: upper fs is r/o, try multi-lower layers mount\n");
 			err = -EINVAL;
 			goto out_put_upperpath;
 		}
@@ -951,11 +951,11 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 
 		err = -EINVAL;
 		if (upperpath.mnt != workpath.mnt) {
-			pr_err("overlayfs: workdir and upperdir must reside under the same mount\n");
+			pr_debug_once("overlayfs: workdir and upperdir must reside under the same mount\n");
 			goto out_put_workpath;
 		}
 		if (!ovl_workdir_ok(workpath.dentry, upperpath.dentry)) {
-			pr_err("overlayfs: workdir and upperdir must be separate subtrees\n");
+			pr_debug_once("overlayfs: workdir and upperdir must be separate subtrees\n");
 			goto out_put_workpath;
 		}
 
@@ -980,11 +980,11 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 	err = -EINVAL;
 	stacklen = ovl_split_lowerdirs(lowertmp);
 	if (stacklen > OVL_MAX_STACK) {
-		pr_err("overlayfs: too many lower directories, limit is %d\n",
+		pr_debug_once("overlayfs: too many lower directories, limit is %d\n",
 		       OVL_MAX_STACK);
 		goto out_free_lowertmp;
 	} else if (!ufs->config.upperdir && stacklen == 1) {
-		pr_err("overlayfs: at least 2 lowerdir are needed while upperdir nonexistent\n");
+		pr_debug_once("overlayfs: at least 2 lowerdir are needed while upperdir nonexistent\n");
 		goto out_free_lowertmp;
 	}
 
@@ -1007,7 +1007,7 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 	err = -EINVAL;
 	sb->s_stack_depth++;
 	if (sb->s_stack_depth > FILESYSTEM_MAX_STACK_DEPTH) {
-		pr_err("overlayfs: maximum fs stacking depth exceeded\n");
+		pr_debug_once("overlayfs: maximum fs stacking depth exceeded\n");
 		goto out_put_lowerpath;
 	}
 
@@ -1015,7 +1015,7 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 		ufs->upper_mnt = clone_private_mount(&upperpath);
 		err = PTR_ERR(ufs->upper_mnt);
 		if (IS_ERR(ufs->upper_mnt)) {
-			pr_err("overlayfs: failed to clone upperpath\n");
+			pr_debug_once("overlayfs: failed to clone upperpath\n");
 			goto out_put_lowerpath;
 		}
 
@@ -1086,7 +1086,7 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 
 		err = PTR_ERR(mnt);
 		if (IS_ERR(mnt)) {
-			pr_err("overlayfs: failed to clone lowerpath\n");
+			pr_debug_once("overlayfs: failed to clone lowerpath\n");
 			goto out_put_lower_mnt;
 		}
 		/*
@@ -1116,7 +1116,7 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 		err = ovl_verify_origin(upperpath.dentry, ufs->lower_mnt[0],
 					stack[0].dentry, false, true);
 		if (err) {
-			pr_err("overlayfs: failed to verify upper root origin\n");
+			pr_debug_once("overlayfs: failed to verify upper root origin\n");
 			goto out_put_lower_mnt;
 		}
 
@@ -1127,7 +1127,7 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 			err = ovl_verify_origin(ufs->indexdir, ufs->upper_mnt,
 						upperpath.dentry, true, true);
 			if (err)
-				pr_err("overlayfs: failed to verify index dir origin\n");
+				pr_debug_once("overlayfs: failed to verify index dir origin\n");
 
 			/* Cleanup bad/stale/orphan index entries */
 			if (!err)

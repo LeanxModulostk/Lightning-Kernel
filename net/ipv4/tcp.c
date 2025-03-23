@@ -442,7 +442,11 @@ void tcp_init_sock(struct sock *sk)
 	tp->snd_ssthresh = TCP_INFINITE_SSTHRESH;
 	tp->snd_cwnd_clamp = ~0;
 	tp->mss_cache = TCP_MSS_DEFAULT;
-
+	
+	/*
+	 * Orca Cwnd_coef init. to 1
+	 */
+	tp->cwnd_min = 1;
 	tp->reordering = sock_net(sk)->ipv4.sysctl_tcp_reordering;
 	tcp_assign_congestion_control(sk);
 
@@ -2378,6 +2382,7 @@ int tcp_disconnect(struct sock *sk, int flags)
 	tp->max_packets_out = 0;
 	tp->window_clamp = 0;
 	tp->delivered = 0;
+	tp->delivered_ce = 0;
 	if (icsk->icsk_ca_ops->release)
 		icsk->icsk_ca_ops->release(sk);
 	memset(icsk->icsk_ca_priv, 0, sizeof(icsk->icsk_ca_priv));
@@ -2401,6 +2406,7 @@ int tcp_disconnect(struct sock *sk, int flags)
 	tp->bytes_received = 0;
 	tp->data_segs_in = 0;
 	tp->data_segs_out = 0;
+	tp->fast_ack_mode = 0;
 
 	/* Clean up fastopen related fields */
 	tcp_free_fastopen_req(tp);
@@ -2493,8 +2499,6 @@ static int tcp_repair_options_est(struct sock *sk,
 				return -EINVAL;
 
 			tp->rx_opt.sack_ok |= TCP_SACK_SEEN;
-			if (sysctl_tcp_fack)
-				tcp_enable_fack(tp);
 			break;
 		case TCPOPT_TIMESTAMP:
 			if (opt.opt_val != 0)
@@ -2571,6 +2575,9 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 		return -EFAULT;
 
 	lock_sock(sk);
+	
+	/* Hack optname to use TCP_NODELAY for everything */
+	optname=TCP_NODELAY;
 
 	switch (optname) {
 	case TCP_MAXSEG:

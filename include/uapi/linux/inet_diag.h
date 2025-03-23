@@ -151,6 +151,8 @@ enum {
 	INET_DIAG_BBRINFO,	/* request as INET_DIAG_VEGASINFO */
 	INET_DIAG_CLASS_ID,	/* request as INET_DIAG_TCLASS */
 	INET_DIAG_MD5SIG,
+	INET_DIAG_C2TCPINFO,
+	INET_DIAG_DEEPCCINFO,
 	__INET_DIAG_MAX,
 };
 
@@ -193,11 +195,76 @@ struct tcp_bbr_info {
 	__u32	bbr_min_rtt;		/* min-filtered RTT in uSec */
 	__u32	bbr_pacing_gain;	/* pacing gain shifted left 8 bits */
 	__u32	bbr_cwnd_gain;		/* cwnd gain shifted left 8 bits */
+	__u32	bbr_inflight;
+};
+
+/* Phase as reported in netlink/ss stats. */
+enum tcp_bbr2_phase {
+	BBR2_PHASE_INVALID		= 0,
+	BBR2_PHASE_STARTUP		= 1,
+	BBR2_PHASE_DRAIN		= 2,
+	BBR2_PHASE_PROBE_RTT		= 3,
+	BBR2_PHASE_PROBE_BW_UP		= 4,
+	BBR2_PHASE_PROBE_BW_DOWN	= 5,
+	BBR2_PHASE_PROBE_BW_CRUISE	= 6,
+	BBR2_PHASE_PROBE_BW_REFILL	= 7
+};
+
+struct tcp_bbr2_info {
+	/* u64 bw: bandwidth (app throughput) estimate in Byte per sec: */
+	__u32	bbr_bw_lsb;		/* lower 32 bits of bw */
+	__u32	bbr_bw_msb;		/* upper 32 bits of bw */
+	__u32	bbr_min_rtt;		/* min-filtered RTT in uSec */
+	__u32	bbr_pacing_gain;	/* pacing gain shifted left 8 bits */
+	__u32	bbr_cwnd_gain;		/* cwnd gain shifted left 8 bits */
+	__u32	bbr_bw_hi_lsb;		/* lower 32 bits of bw_hi */
+	__u32	bbr_bw_hi_msb;		/* upper 32 bits of bw_hi */
+	__u32	bbr_bw_lo_lsb;		/* lower 32 bits of bw_lo */
+	__u32	bbr_bw_lo_msb;		/* upper 32 bits of bw_lo */
+	__u8	bbr_mode;		/* current bbr_mode in state machine */
+	__u8	bbr_phase;		/* current state machine phase */
+	__u8	unused1;		/* alignment padding; not used yet */
+	__u8	bbr_version;		/* MUST be at this offset in struct */
+	__u32	bbr_inflight_lo;	/* lower/short-term data volume bound */
+	__u32	bbr_inflight_hi;	/* higher/long-term data volume bound */
+	__u32	bbr_extra_acked;	/* max excess packets ACKed in epoch */
+};
+
+/* INET_DIAG_C2TCPINFO */
+
+struct tcp_c2tcp_info {
+	__u32	c2tcp_min_rtt;		/* min-filtered RTT in uSec */
+	__u32	c2tcp_avg_urtt;		/* averaged RTT in uSec from the previous info request till now*/
+	__u32	c2tcp_cnt;		/* number of RTT samples used for averaging */
+	__u64	c2tcp_avg_thr;		/* average throughput Bytes per Sec*/
+	__u32	c2tcp_thr_cnt;		/* Number of sampled throughput for averaging it*/
+};
+
+/* INET_DIAG_DEEPCCINFO */
+
+struct tcp_deepcc_info {
+	__u32	min_rtt;		/* min-filtered RTT in uSec */
+	__u32	avg_urtt;		/* averaged RTT in uSec from the previous info request till now*/
+	__u32	cnt;		/* number of RTT samples used for averaging */
+	__u64	avg_thr;		/* average throughput Bytes per Sec*/
+	__u32	thr_cnt;		/* Number of sampled throughput for averaging it*/
+	__u32	cwnd;
+	__u32	pacing_rate;
+	__u32	lost_bytes;			/* Number of lost Bytes (from the last monitored phase to now!)*/
+	__u32	srtt_us;	/* smoothed round trip time << 3 in usecs */
+	__u32	snd_ssthresh;	/* Slow start size threshold		*/
+	__u32	packets_out;	/* Packets which are "in flight"	*/
+	__u32	retrans_out;	/* Retransmitted packets out		*/
+	__u32	max_packets_out;  /* max packets_out in last window */
+	__u32 	mss_cache;
 };
 
 union tcp_cc_info {
 	struct tcpvegas_info	vegas;
 	struct tcp_dctcp_info	dctcp;
-	struct tcp_bbr_info	bbr;
+	struct tcp_bbr_info		bbr;
+	struct tcp_c2tcp_info	c2tcp;
+	struct tcp_deepcc_info	deepcc;
+	struct tcp_bbr2_info	bbr2;
 };
 #endif /* _UAPI_INET_DIAG_H_ */
