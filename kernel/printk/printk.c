@@ -1140,6 +1140,19 @@ void __init setup_log_buf(int early)
 		free, (free * 100) / __LOG_BUF_LEN);
 }
 
+static bool mute_console;
+ 
+ static int __init mute_console_setup(char *str)
+ {
+     mute_console = true;
+     pr_info("All consoles muted.\n");
+ 
+     return 0;
+ }
+ 
+ early_param("mute_console", mute_console_setup);
+ module_param(mute_console, bool, 0644);
+
 static bool __read_mostly ignore_loglevel;
 
 static int __init ignore_loglevel_setup(char *str)
