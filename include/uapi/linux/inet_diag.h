@@ -220,6 +220,18 @@ enum tcp_bbr_phase {
 	BBR_PHASE_PROBE_BW_REFILL	= 7,
 };
 
+/* Phase as reported in netlink/ss stats. */
+ enum tcp_bbr2_phase {
+ 	BBR2_PHASE_INVALID		= 0,
+ 	BBR2_PHASE_STARTUP		= 1,
+ 	BBR2_PHASE_DRAIN		= 2,
+ 	BBR2_PHASE_PROBE_RTT		= 3,
+ 	BBR2_PHASE_PROBE_BW_UP		= 4,
+ 	BBR2_PHASE_PROBE_BW_DOWN	= 5,
+ 	BBR2_PHASE_PROBE_BW_CRUISE	= 6,
+ 	BBR2_PHASE_PROBE_BW_REFILL	= 7
+ };
+ 
 struct tcp_bbr2_info {
 	/* u64 bw: bandwidth (app throughput) estimate in Byte per sec: */
 	__u32	bbr_bw_lsb;		/* lower 32 bits of bw */
