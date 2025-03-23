@@ -788,3 +788,7 @@ CONFIG_TRIM_UNUSED_KSYMS=y
 CONFIG_LRU_GEN=y
 CONFIG_LRU_GEN_ENABLED=y
 # CONFIG_LRU_GEN_STATS is not set
+
+# Lean
+CONFIG_CMDLINE_EXTEND=y
+CONFIG_CMDLINE="mute_console stack_depot_disable=on cgroup_disable=pressure nodebugmon cgroup.memory=nokmem,nosocket loglevel=0 initcall_debug=0 pti=off nowatchdog mce=ignore_ce,dont_log_ce nosoftlockup quiet nmi_watchdog=0 tsc=nowatchdog"
