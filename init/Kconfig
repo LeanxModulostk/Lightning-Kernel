@@ -700,6 +700,9 @@ config PELT_UTIL_HALFLIFE_8
 	  Use 8ms as PELT half-life value. This will increase the ramp-up and
 	  decay of utlization and load four time as fast as for the default
 	  configuration using 32ms.
+	  
+config PELT_UTIL_HALFLIFE_4
+ 	bool "8/4 ms, more faster"
 
 endchoice
 
