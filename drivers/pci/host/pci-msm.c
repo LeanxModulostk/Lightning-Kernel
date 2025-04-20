@@ -4131,7 +4131,7 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev, u32 options)
 
 	/* assert PCIe reset link to keep EP in reset */
 
-	PCIE_INFO(dev, "PCIe: Assert the reset of endpoint of RC%d.\n",
+	PCIE_DBG(dev, "PCIe: Assert the reset of endpoint of RC%d.\n",
 		dev->rc_idx);
 	gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
 				dev->gpio[MSM_PCIE_GPIO_PERST].on);
@@ -4451,7 +4451,7 @@ static void msm_pcie_disable(struct msm_pcie_dev_t *dev, u32 options)
 	dev->power_on = false;
 	dev->link_turned_off_counter++;
 
-	PCIE_INFO(dev, "PCIe: Assert the reset of endpoint of RC%d.\n",
+	PCIE_DBG(dev, "PCIe: Assert the reset of endpoint of RC%d.\n",
 		dev->rc_idx);
 
 	gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
@@ -6795,6 +6795,7 @@ static int __init pcie_init(void)
 #ifdef CONFIG_IPC_LOGGING
 	for (i = 0; i < MAX_RC_NUM; i++) {
 		snprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-short", i);
+#ifdef CONFIG_IPC_LOGGING
 		msm_pcie_dev[i].ipc_log =
 			ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
 		if (msm_pcie_dev[i].ipc_log == NULL)
@@ -6804,7 +6805,9 @@ static int __init pcie_init(void)
 			PCIE_DBG(&msm_pcie_dev[i],
 				"PCIe IPC logging is enable for RC%d\n",
 				i);
+#endif
 		snprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-long", i);
+#ifdef CONFIG_IPC_LOGGING
 		msm_pcie_dev[i].ipc_log_long =
 			ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
 		if (msm_pcie_dev[i].ipc_log_long == NULL)
@@ -6814,7 +6817,9 @@ static int __init pcie_init(void)
 			PCIE_DBG(&msm_pcie_dev[i],
 				"PCIe IPC logging %s is enable for RC%d\n",
 				rc_name, i);
+#endif
 		snprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-dump", i);
+#ifdef CONFIG_IPC_LOGGING
 		msm_pcie_dev[i].ipc_log_dump =
 			ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
 		if (msm_pcie_dev[i].ipc_log_dump == NULL)
@@ -6824,6 +6829,7 @@ static int __init pcie_init(void)
 			PCIE_DBG(&msm_pcie_dev[i],
 				"PCIe IPC logging %s is enable for RC%d\n",
 				rc_name, i);
+#endif
 		spin_lock_init(&msm_pcie_dev[i].cfg_lock);
 		msm_pcie_dev[i].cfg_access = true;
 		mutex_init(&msm_pcie_dev[i].enumerate_lock);
