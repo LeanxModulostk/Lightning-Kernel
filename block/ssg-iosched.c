@@ -44,7 +44,7 @@ extern void blk_sec_stats_account_io_done(
 static const int read_expire = HZ / 2;		/* max time before a read is submitted. */
 static const int write_expire = 5 * HZ;		/* ditto for writes, these limits are SOFT! */
 static const int max_write_starvation = 2;	/* max times reads can starve a write */
-static const int congestion_threshold = 90;	/* percentage of congestion threshold */
+static const int congestion_threshold = 85;	/* percentage of congestion threshold */
 static const int max_tgroup_io_ratio = 50;	/* maximum service ratio for each thread group */
 static const int max_async_write_ratio = 25;	/* maximum service ratio for async write */
 
@@ -267,7 +267,6 @@ static inline int ssg_check_fifo(struct ssg_data *ssg, int ddir)
 static struct request *ssg_fifo_request(struct ssg_data *ssg, int data_dir)
 {
 	struct request *rq;
-	unsigned long flags;
 
 	if (WARN_ON_ONCE(data_dir != READ && data_dir != WRITE))
 		return NULL;
@@ -279,18 +278,7 @@ static struct request *ssg_fifo_request(struct ssg_data *ssg, int data_dir)
 	if (data_dir == READ || !blk_queue_is_zoned(rq->q))
 		return rq;
 
-	/*
-	 * Look for a write request that can be dispatched, that is one with
-	 * an unlocked target zone.
-	 */
-	spin_lock_irqsave(&ssg->zone_lock, flags);
-	list_for_each_entry(rq, &ssg->fifo_list[WRITE], queuelist) {
-		if (blk_req_can_dispatch_to_zone(rq))
-			goto out;
-	}
 	rq = NULL;
-out:
-	spin_unlock_irqrestore(&ssg->zone_lock, flags);
 
 	return rq;
 }
@@ -302,7 +290,6 @@ out:
 static struct request *ssg_next_request(struct ssg_data *ssg, int data_dir)
 {
 	struct request *rq;
-	unsigned long flags;
 
 	if (WARN_ON_ONCE(data_dir != READ && data_dir != WRITE))
 		return NULL;
@@ -314,17 +301,7 @@ static struct request *ssg_next_request(struct ssg_data *ssg, int data_dir)
 	if (data_dir == READ || !blk_queue_is_zoned(rq->q))
 		return rq;
 
-	/*
-	 * Look for a write request that can be dispatched, that is one with
-	 * an unlocked target zone.
-	 */
-	spin_lock_irqsave(&ssg->zone_lock, flags);
-	while (rq) {
-		if (blk_req_can_dispatch_to_zone(rq))
-			break;
-		rq = ssg_latter_request(rq);
-	}
-	spin_unlock_irqrestore(&ssg->zone_lock, flags);
+	rq = NULL;
 
 	return rq;
 }
@@ -416,7 +393,7 @@ done:
 	/*
 	 * If the request needs its target zone locked, do it.
 	 */
-	blk_req_zone_write_lock(rq);
+	// blk_req_zone_write_lock(rq);
 	rq->rq_flags |= RQF_STARTED;
 	return rq;
 }
@@ -471,6 +448,7 @@ static void ssg_set_shallow_depth(struct ssg_data *ssg, struct blk_mq_tags *tags
 		max_t(unsigned int, ssg->max_tgroup_rqs / map_nr, 1);
 }
 
+#if 0
 static void ssg_depth_updated(struct blk_mq_hw_ctx *hctx)
 {
 	struct request_queue *q = hctx->queue;
@@ -487,11 +465,12 @@ static void ssg_depth_updated(struct blk_mq_hw_ctx *hctx)
 		ssg->rq_info = NULL;
 
 	ssg_set_shallow_depth(ssg, tags);
-	sbitmap_queue_min_shallow_depth(&tags->bitmap_tags,
-			ssg->async_write_shallow_depth);
+	// sbitmap_queue_min_shallow_depth(&tags->bitmap_tags,
+	// 		ssg->async_write_shallow_depth);
 
 	ssg_blkcg_depth_updated(hctx);
 }
+#endif
 
 static inline bool ssg_op_is_async_write(unsigned int op)
 {
@@ -550,12 +529,22 @@ static void ssg_limit_depth(unsigned int op, struct blk_mq_alloc_data *data)
 
 static int ssg_init_hctx(struct blk_mq_hw_ctx *hctx, unsigned int hctx_idx)
 {
+	// struct request_queue *q = hctx->queue;
 	struct ssg_data *ssg = hctx->queue->elevator->elevator_data;
 	struct blk_mq_tags *tags = hctx->sched_tags;
+	unsigned int depth;
 
 	ssg_set_shallow_depth(ssg, tags);
-	sbitmap_queue_min_shallow_depth(&tags->bitmap_tags,
-			ssg->async_write_shallow_depth);
+	depth = tags->bitmap_tags.sb.depth;
+	ssg->congestion_threshold_rqs = depth * congestion_threshold / 100U;
+
+	kfree(ssg->rq_info);
+	ssg->rq_info = kmalloc(depth * sizeof(struct ssg_request_info),
+			GFP_KERNEL | __GFP_ZERO);
+	if (ZERO_OR_NULL_PTR(ssg->rq_info))
+		ssg->rq_info = NULL;
+
+	ssg_blkcg_depth_updated(hctx);
 
 	return 0;
 }
@@ -675,13 +664,6 @@ static void ssg_insert_request(struct blk_mq_hw_ctx *hctx, struct request *rq,
 	struct ssg_data *ssg = q->elevator->elevator_data;
 	const int data_dir = rq_data_dir(rq);
 
-
-	/*
-	 * This may be a requeue of a write request that has locked its
-	 * target zone. If it is the case, this releases the zone lock.
-	 */
-	blk_req_zone_write_unlock(rq);
-
 	if (blk_mq_sched_try_insert_merge(q, rq))
 		return;
 
@@ -742,7 +724,7 @@ static void ssg_prepare_request(struct request *rq, struct bio *bio)
         set_thread_group_info(rqi);
 
         rcu_read_lock();
-        rqi->blkg = blkg_lookup(css_to_blkcg(blkcg_css()), rq->q);
+        rqi->blkg = blkg_lookup(css_to_blkcg(task_css(current, io_cgrp_id)), rq->q);
         ssg_blkcg_inc_rq(rqi->blkg);
         rcu_read_unlock();
     }
@@ -770,18 +752,7 @@ static void ssg_finish_request(struct request *rq)
 	struct request_queue *q = rq->q;
 	struct ssg_data *ssg = q->elevator->elevator_data;
 	struct ssg_request_info *rqi;
-	struct blk_mq_hw_ctx *hctx;
-
-	if (blk_queue_is_zoned(q)) {
-		unsigned long flags;
-
-		spin_lock_irqsave(&ssg->zone_lock, flags);
-		blk_req_zone_write_unlock(rq);
-		if (!list_empty(&ssg->fifo_list[WRITE]))
-			hctx = blk_mq_map_queue(q, rq->mq_ctx->cpu);
-			blk_mq_sched_mark_restart_hctx(hctx);
-		spin_unlock_irqrestore(&ssg->zone_lock, flags);
-	}
+	// struct blk_mq_hw_ctx *hctx = rq->mq_hctx;
 
 	if (unlikely(!(rq->rq_flags & RQF_ELVPRIV)))
 		return;
@@ -1002,7 +973,7 @@ static struct elevator_type ssg_iosched = {
 		.request_merged = ssg_request_merged,
 		.has_work = ssg_has_work,
 		.limit_depth = ssg_limit_depth,
-		.depth_updated = ssg_depth_updated,
+		// .depth_updated = ssg_depth_updated,
 		.init_hctx = ssg_init_hctx,
 		.init_sched = ssg_init_queue,
 		.exit_sched = ssg_exit_queue,
@@ -1014,7 +985,7 @@ static struct elevator_type ssg_iosched = {
 	.uses_mq = true,
 	.elevator_attrs = ssg_attrs,
 	.elevator_name = "ssg",
-	.elevator_alias = "ssg",
+	// .elevator_alias = "ssg",
 	.elevator_owner = THIS_MODULE,
 };
 MODULE_ALIAS("ssg");

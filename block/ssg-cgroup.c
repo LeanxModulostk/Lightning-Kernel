@@ -19,14 +19,14 @@ static struct blkcg_policy ssg_blkcg_policy;
 
 
 #define CPD_TO_SSG_BLKCG(_cpd) \
-	container_of_safe((_cpd), struct ssg_blkcg, cpd)
+    container_of((_cpd), struct ssg_blkcg, cpd)
 #define BLKCG_TO_SSG_BLKCG(_blkcg) \
-	CPD_TO_SSG_BLKCG(blkcg_to_cpd((_blkcg), &ssg_blkcg_policy))
+    CPD_TO_SSG_BLKCG(blkcg_to_cpd((_blkcg), &ssg_blkcg_policy))
 
 #define PD_TO_SSG_BLKG(_pd) \
-	container_of_safe((_pd), struct ssg_blkg, pd)
+    container_of((_pd), struct ssg_blkg, pd)
 #define BLKG_TO_SSG_BLKG(_blkg) \
-	PD_TO_SSG_BLKG(blkg_to_pd((_blkg), &ssg_blkcg_policy))
+    PD_TO_SSG_BLKG(blkg_to_pd((_blkg), &ssg_blkcg_policy))
 
 #define CSS_TO_SSG_BLKCG(css) BLKCG_TO_SSG_BLKCG(css_to_blkcg(css))
 
@@ -50,7 +50,7 @@ static void ssg_blkcg_cpd_init(struct blkcg_policy_data *cpd)
 	if (IS_ERR_OR_NULL(ssg_blkcg))
 		return;
 
-	ssg_blkcg->max_available_ratio = 100;
+	ssg_blkcg->max_available_ratio = 25;
 }
 
 static void ssg_blkcg_cpd_free(struct blkcg_policy_data *cpd)
@@ -120,7 +120,7 @@ unsigned int ssg_blkcg_shallow_depth(struct request_queue *q)
 	struct ssg_blkg *ssg_blkg;
 
 	rcu_read_lock();
-	blkg = blkg_lookup(css_to_blkcg(blkcg_css()), q);
+	blkg = blkg_lookup(css_to_blkcg(task_css(current, io_cgrp_id)), q);
 	ssg_blkg = BLKG_TO_SSG_BLKG(blkg);
 	rcu_read_unlock();
 
