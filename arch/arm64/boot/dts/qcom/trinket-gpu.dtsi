@@ -62,7 +62,7 @@
 		qcom,id = <0>;
 		qcom,chipid = <0x06010000>;
 
-		qcom,initial-pwrlevel = <7>;
+		qcom,initial-pwrlevel = <8>;
 		qcom,idle-timeout = <80>;
 
 		qcom,ubwc-mode = <1>;
@@ -245,9 +245,18 @@
 				qcom,bus-max = <5>;
 			};
 
-			/* XO */
+			/* UC */
 			qcom,gpu-pwrlevel@8 {
 				reg = <8>;
+				qcom,gpu-freq = <213333333>;
+ 				qcom,bus-freq = <2>;
+ 				qcom,bus-min = <1>;
+ 				qcom,bus-max = <3>;
+ 			};
+ 
+ 			/* XO */
+ 			qcom,gpu-pwrlevel@9 {
+ 				reg = <9>;
 				qcom,gpu-freq = <0>;
 				qcom,bus-freq = <0>;
 				qcom,bus-min = <0>;
