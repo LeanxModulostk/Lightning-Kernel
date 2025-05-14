@@ -6,6 +6,7 @@
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 #include <linux/version.h>
+
 /**
  * _lz4_decompress_asm: The fast LZ4 decompression, lz4 decompression algothrim asm
  * routine,support Huawei EROFS filesystem striving for maximum decompression speed.
@@ -40,7 +41,7 @@
 #define save_dst		x15
 #define save_src		x16
 #define offset_src_ptr		x17
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
 #define w_tmp_match_length	w6
 #define tmp_match_length	x6
 #else
@@ -73,7 +74,7 @@
 .macro lz4_decompress_asm_generic	doprfm=1
 	stp     x29, x30, [sp, #-16]!
 	mov     x29, sp
-	stp	x3, x0, [sp, #-16]!		/* push src and dst in stack */
+	stp	x3, x0, [sp, #-16]!			/* push src and dst in stack */
 	ldr	x3, [x3]				/* x3 = *src_ptr */
 	ldr	x0, [x0]				/* x0 = *dst_ptr */
 	adr_l	permtable_addr, Permtable
@@ -98,12 +99,11 @@
 	prfm pstl2strm,[x0,#512]
 .endif
 
-	/* Decode Token Byte: */
 2:
-	/* Decode_token:*/
-	ldrb	w_tmp, [x3], #1		/* read Token Byte */
-	lsr	literal_length, tmp, #4	/* get literal_length */
-	and	tmp_match_length, tmp, #0xf	/* get match_length */
+	/* Decode_token: */
+	ldrb	w_tmp, [x3], #1				/* read Token Byte */
+	lsr	literal_length, tmp, #4			/* get literal_length */
+	and	tmp_match_length, tmp, #0xf		/* get match_length */
 	add	match_length, tmp_match_length, #4	/* match_length >=4 */
 
 	/*
@@ -125,7 +125,7 @@
 	cmp	tmp, #255
 	b.eq	3b
 
-/* literal copy */
+	/* literal copy */
 4:
 	/* Copy_long_literal_hs_15: */
 	mov	copy_from_ptr, x3
@@ -134,6 +134,7 @@
 	add	x0, x0, literal_length
 	check_dst_overflow
 	check_src_overflow
+
 5:
 	/* Copy_long_literal_loop: */
 	ldr	q0, [copy_from_ptr], #16
@@ -151,10 +152,10 @@
 	add	x0, x0, literal_length
 
 	/* Decode offset and match_length */
-	/* Decode_offset_matchlength: */
 7:
+	/* Decode_offset_matchlength: */
 	mov	offset_src_ptr, x3
-	ldrh	w_offset, [x3], #2	/* 2Byte:offset bytes */
+	ldrh	w_offset, [x3], #2		/* 2Byte: offset bytes */
 	cbz	offset, Failed			/* match_length == 0 is invalid */
 	sub	copy_from_ptr, x0, offset
 	cmp	copy_from_ptr, x1
@@ -166,6 +167,7 @@
 	add	x0, x0, match_length
 	cmp	match_length, #19
 	b.lo	9f
+
 	/*
 	 * continue decoding more match length bytes.
 	 */
@@ -202,6 +204,7 @@
 	cmp     offset , #16
 	b.lo    12f
 	ldp     q0, q1, [copy_from_ptr]
+
 12:
 	/* Copy_match_perm: */
 	ldrb	w_tmp, [cplen_table_addr, offset]
@@ -209,6 +212,7 @@
 	add	copy_to_ptr, copy_to_ptr, tmp
 	cmp	x0, copy_to_ptr
 	b.ls	1b
+
 13:
 	/* Copy_offset_lt_32_loop: */
 	stp	q0, q1, [copy_to_ptr]
@@ -219,7 +223,7 @@
 	b.hi	13b
 	b	1b
 
-/* offset >= match */
+	/* offset >= match */
 14:
 	/* Cond_offset_ge_matchlength: */
 	ldr	q0, [copy_from_ptr], #16
@@ -227,6 +231,7 @@
 
 	cmp	x0, copy_to_ptr
 	b.ls	1b
+
 15:
 	/* Copy_offset_ge_match_loop: */
 	ldp	q0, q1, [copy_from_ptr], #32
@@ -240,11 +245,11 @@
 .text
 .p2align 4
 
-ENTRY(_lz4_decompress_asm)
+SYM_FUNC_START(_lz4_decompress_asm)
 	lz4_decompress_asm_generic
-ENDPROC(_lz4_decompress_asm)
+SYM_FUNC_END(_lz4_decompress_asm)
 
-Failed:
+SYM_INNER_LABEL(Failed, SYM_L_LOCAL)
 	mov	tmp, #-1
 	b	Exit_here
 
@@ -302,6 +307,6 @@ Copylength_table:
 
 .text
 .p2align 4
-ENTRY(_lz4_decompress_asm_noprfm)
+SYM_FUNC_START(_lz4_decompress_asm_noprfm)
 	lz4_decompress_asm_generic	0
-ENDPROC(_lz4_decompress_asm_noprfm)
+SYM_FUNC_END(_lz4_decompress_asm_noprfm)
