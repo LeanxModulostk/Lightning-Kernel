@@ -9086,7 +9086,7 @@ static int qseecom_probe(struct platform_device *pdev)
 	rc = qseecom_scm_call(6, 3, &feature, sizeof(feature),
 		&resp, sizeof(resp));
 	mutex_unlock(&app_access_lock);
-	pr_info("qseecom.qsee_version = 0x%x\n", resp.result);
+	pr_debug("qseecom.qsee_version = 0x%x\n", resp.result);
 	if (rc) {
 		pr_err("Failed to get QSEE version info %d\n", rc);
 		goto exit_del_cdev;
@@ -9131,9 +9131,9 @@ static int qseecom_probe(struct platform_device *pdev)
 				of_property_read_bool((&pdev->dev)->of_node,
 						"qcom,no-clock-support");
 		if (!qseecom.no_clock_support) {
-			pr_info("qseecom clocks handled by other subsystem\n");
+			pr_debug("qseecom clocks handled by other subsystem\n");
 		} else {
-			pr_info("no-clock-support=0x%x",
+			pr_debug("no-clock-support=0x%x",
 			qseecom.no_clock_support);
 		}
 
