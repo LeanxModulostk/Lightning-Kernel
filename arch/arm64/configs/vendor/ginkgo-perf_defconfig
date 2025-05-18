@@ -782,7 +782,7 @@ CONFIG_LRU_GEN_ENABLED=y
 
 # Lean
 CONFIG_CMDLINE_EXTEND=y
-CONFIG_CMDLINE="mute_console stack_depot_disable=on cgroup_disable=pressure nodebugmon cgroup.memory=nokmem,nosocket loglevel=0 initcall_debug=0 pti=off nowatchdog mce=ignore_ce,dont_log_ce nosoftlockup quiet nmi_watchdog=0 tsc=nowatchdog"
+CONFIG_CMDLINE="mute_console stack_depot_disable=on cgroup_disable=pressure nodebugmon cgroup.memory=nokmem,nosocket loglevel=0 initcall_debug=0 pti=off nowatchdog mce=ignore_ce,dont_log_ce nosoftlockup quiet nmi_watchdog=0 tsc=nowatchdog rcupdate.rcu_expedited=1 rcu_nocbs=0-7 noirqdebug kpti=off mitigations=off"
 CONFIG_CPU_FREQ_GOV_CONSERVATIVE=y
 CONFIG_CPU_FREQ_GOV_SCHEDHORIZON=y
 CONFIG_IOSCHED_DEADLINE=y
