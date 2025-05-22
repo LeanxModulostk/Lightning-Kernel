@@ -725,7 +725,7 @@ KBUILD_CFLAGS	+= $(call cc-disable-warning, attribute-alias)
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS   += -Os
 else
-KBUILD_CFLAGS   += -O3
+KBUILD_CFLAGS   += -O2
 ifeq ($(cc-name),clang)
 KBUILD_CFLAGS	+= -mcpu=cortex-a53 -mtune=cortex-a53
 
@@ -836,7 +836,7 @@ KBUILD_CFLAGS += $(call cc-option,-fno-delete-null-pointer-checks,)
 KBUILD_CFLAGS += $(call cc-disable-warning, unused-but-set-variable)
 
 ifeq ($(ld-name),lld)
-LDFLAGS += --lto-O3
+LDFLAGS += -z norelro
 endif
 
 KBUILD_CFLAGS += $(call cc-disable-warning, unused-const-variable)
