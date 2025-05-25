@@ -748,7 +748,7 @@ ifdef CONFIG_POLLY_CLANG
 POLLY_FLAGS	+= -mllvm -polly \
 		   -mllvm -polly-ast-use-context \
 		   -mllvm -polly-invariant-load-hoisting \
-		   -mllvm -polly-opt-fusion=max \
+		   -mllvm -polly-isl-arg=--no-schedule-serialize-sccs \
 		   -mllvm -polly-run-inliner \
 		   -mllvm -polly-vectorizer=stripmine
 # Polly may optimise loops with dead paths beyound what the linker
@@ -922,11 +922,16 @@ endif
 
 ifdef CONFIG_LTO_CLANG
 ifdef CONFIG_THINLTO
-lto-clang-flags	:= -flto=thin
+lto-clang-flags	:= -flto=thin -fsplit-lto-unit $(call cc-option,-funified-lto)
+
+# LLVM tunings
+KBUILD_CFLAGS += -mllvm -inline-threshold=5000
+KBUILD_CFLAGS += -mllvm -inlinehint-threshold=3000
+KBUILD_CFLAGS += -mllvm -unroll-threshold=1200
 else
 lto-clang-flags	:= -flto
 endif
-lto-clang-flags += -fvisibility=default $(call cc-option, -fsplit-lto-unit)
+lto-clang-flags += -fvisibility=hidden
 
 KBUILD_LDFLAGS_MODULE += -T scripts/module-lto.lds
 
