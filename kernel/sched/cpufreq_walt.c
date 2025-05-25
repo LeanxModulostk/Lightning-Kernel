@@ -303,6 +303,7 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 {
 	struct cpufreq_policy *policy = wg_policy->policy;
 	unsigned int freq;
+	unsigned int idx, l_freq, h_freq;
  
 	if (arch_scale_freq_invariant())
 		freq = policy->cpuinfo.max_freq;
@@ -313,7 +314,6 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 		 */
 		freq = policy->cur + (policy->cur >> 2);
 
-	unsigned int idx, l_freq, h_freq;
 	freq = (freq + (freq >> 2)) * util / max;
 
 	if (freq == wg_policy->cached_raw_freq && !wg_policy->need_freq_update)
@@ -399,7 +399,6 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 	bool is_hiload;
 	unsigned long min_util;
 	int target_boost;
-	unsigned long pl = wg_cpu->walt_load.pl;
 
 	if (use_pelt())
 		return;
@@ -600,8 +599,6 @@ waltgov_update_freq(struct update_util_data *hook, u64 time,
 		else
 			waltgov_deferred_update(wg_policy, time, next_f);
 	}
-
-out:
 	raw_spin_unlock(&wg_policy->update_lock);
 }
 
@@ -1089,7 +1086,10 @@ static int waltgov_kthread_create(struct waltgov_policy *wg_policy)
 	}
 
 	wg_policy->thread = thread;
-	kthread_bind_mask(thread, policy->related_cpus);
+	if (policy->dvfs_possible_from_any_cpu)
+		set_cpus_allowed_ptr(thread, policy->related_cpus);
+	else
+		kthread_bind_mask(thread, policy->related_cpus);
 	init_irq_work(&wg_policy->irq_work, waltgov_irq_work);
 	mutex_init(&wg_policy->work_lock);
 
@@ -1359,9 +1359,4 @@ struct cpufreq_governor *cpufreq_default_governor(void)
 }
 #endif
 
-static int __init waltgov_register(void)
-{
-	return cpufreq_register_governor(&walt_gov);
-}
-fs_initcall(waltgov_register);
-
+cpufreq_governor_init(walt_gov);
