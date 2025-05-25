@@ -28,8 +28,7 @@
 
 struct waltgov_tunables {
 	struct gov_attr_set	attr_set;
-	unsigned int		up_rate_limit_us;
-	unsigned int		down_rate_limit_us;
+	unsigned int		rate_limit_us;
 	unsigned int		hispeed_load;
 	unsigned int		hispeed_freq;
 	unsigned int		rtg_boost_freq;
@@ -57,9 +56,7 @@ struct waltgov_policy {
 
 	raw_spinlock_t		update_lock;
 	u64			last_freq_update_time;
-	s64			min_rate_limit_ns;
-	s64			up_rate_delay_ns;
-	s64			down_rate_delay_ns;
+	s64			freq_update_delay_ns;
 	unsigned int		next_freq;
 	unsigned int		cached_raw_freq;
 	unsigned int		prev_cached_raw_freq;
@@ -92,35 +89,39 @@ struct waltgov_cpu {
 
 static DEFINE_PER_CPU(struct waltgov_cpu, waltgov_cpu);
 static unsigned int stale_ns;
-static DEFINE_PER_CPU(struct waltgov_tunables *, cached_tunables);
 
 #define DEFAULT_TARGET_LOAD (0)
 static int default_target_loads[] = {DEFAULT_TARGET_LOAD};
 
 /************************ Governor internals ***********************/
 
+static bool waltgov_should_rate_limit(struct waltgov_policy *wg_policy, u64 time)
+{
+	s64 delta_ns = time - wg_policy->last_freq_update_time;
+	return delta_ns < wg_policy->freq_update_delay_ns;
+}
+
 static bool waltgov_should_update_freq(struct waltgov_policy *wg_policy, u64 time)
 {
-	s64 delta_ns;
-
 	if (!cpufreq_can_do_remote_dvfs(wg_policy->policy))
 		return false;
 
 	if (unlikely(wg_policy->limits_changed)) {
 		wg_policy->limits_changed = false;
-		wg_policy->need_freq_update = true;
+		wg_policy->need_freq_update = cpufreq_driver_test_flags(CPUFREQ_NEED_UPDATE_LIMITS);
 		return true;
 	}
 
 	/*
-	 * No need to recalculate next freq for min_rate_limit_us
-	 * at least. However we might still decide to further rate
-	 * limit once frequency change direction is decided, according
-	 * to the separate rate limits.
+	 * When frequency-invariant utilization tracking is present, there's no
+	 * rate limit when increasing frequency. Therefore, the next frequency
+	 * must be determined before a decision can be made to rate limit the
+	 * frequency change, hence the rate limit check is bypassed here.
 	 */
 
-	delta_ns = time - wg_policy->last_freq_update_time;
-	return delta_ns >= wg_policy->min_rate_limit_ns;
+	if (arch_scale_freq_invariant())
+	 	return true;
+ 	return !waltgov_should_rate_limit(wg_policy, time);
 }
 
 static inline bool use_pelt(void)
@@ -132,36 +133,16 @@ static inline bool use_pelt(void)
 #endif
 }
 
-static bool waltgov_up_down_rate_limit(struct waltgov_policy *wg_policy, u64 time,
-				     unsigned int next_freq)
-{
-	s64 delta_ns;
-
-	delta_ns = time - wg_policy->last_freq_update_time;
-
-	if (next_freq > wg_policy->next_freq &&
-	    delta_ns < wg_policy->up_rate_delay_ns)
-		return true;
-
-	if (next_freq < wg_policy->next_freq &&
-	    delta_ns < wg_policy->down_rate_delay_ns)
-		return true;
-
-	return false;
-}
-
 static bool waltgov_update_next_freq(struct waltgov_policy *wg_policy, u64 time,
 						unsigned int next_freq)
 
 {
-	if (wg_policy->next_freq == next_freq)
+	if (wg_policy->need_freq_update)
+		wg_policy->need_freq_update = false;
+	else if (next_freq == wg_policy->next_freq ||
+		(next_freq < wg_policy->next_freq &&
+		 waltgov_should_rate_limit(wg_policy, time)))
 		return false;
-
-	if (waltgov_up_down_rate_limit(wg_policy, time, next_freq)) {
-		/* Restore cached freq as next_freq is not changed */
-		wg_policy->cached_raw_freq = wg_policy->prev_cached_raw_freq;
-		return false;
-	}
 
 	wg_policy->next_freq = next_freq;
 	wg_policy->last_freq_update_time = time;
@@ -319,7 +300,6 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 	if (freq == wg_policy->cached_raw_freq && !wg_policy->need_freq_update)
 		return wg_policy->next_freq;
 
-	wg_policy->need_freq_update = false;
 	wg_policy->cached_raw_freq = freq;
 	l_freq = cpufreq_driver_resolve_freq(policy, freq);
 	idx = cpufreq_frequency_table_target(policy, freq, CPUFREQ_RELATION_H);
@@ -637,32 +617,15 @@ static inline struct waltgov_tunables *to_waltgov_tunables(struct gov_attr_set *
 	return container_of(attr_set, struct waltgov_tunables, attr_set);
 }
 
-static DEFINE_MUTEX(min_rate_lock);
-
-static void update_min_rate_limit_ns(struct waltgov_policy *wg_policy)
-{
-	mutex_lock(&min_rate_lock);
-	wg_policy->min_rate_limit_ns = min(wg_policy->up_rate_delay_ns,
-					   wg_policy->down_rate_delay_ns);
-	mutex_unlock(&min_rate_lock);
-}
-
-static ssize_t up_rate_limit_us_show(struct gov_attr_set *attr_set, char *buf)
+static ssize_t rate_limit_us_show(struct gov_attr_set *attr_set, char *buf)
 {
 	struct waltgov_tunables *tunables = to_waltgov_tunables(attr_set);
 
-	return scnprintf(buf, PAGE_SIZE, "%u\n", tunables->up_rate_limit_us);
+	return sprintf(buf, "%u\n", tunables->rate_limit_us);
 }
 
-static ssize_t down_rate_limit_us_show(struct gov_attr_set *attr_set, char *buf)
-{
-	struct waltgov_tunables *tunables = to_waltgov_tunables(attr_set);
-
-	return scnprintf(buf, PAGE_SIZE, "%u\n", tunables->down_rate_limit_us);
-}
-
-static ssize_t up_rate_limit_us_store(struct gov_attr_set *attr_set,
-				      const char *buf, size_t count)
+static ssize_t
+rate_limit_us_store(struct gov_attr_set *attr_set, const char *buf, size_t count)
 {
 	struct waltgov_tunables *tunables = to_waltgov_tunables(attr_set);
 	struct waltgov_policy *wg_policy;
@@ -674,41 +637,15 @@ static ssize_t up_rate_limit_us_store(struct gov_attr_set *attr_set,
 	if (kstrtouint(buf, 10, &rate_limit_us))
 		return -EINVAL;
 
-	tunables->up_rate_limit_us = rate_limit_us;
+	tunables->rate_limit_us = rate_limit_us;
 
-	list_for_each_entry(wg_policy, &attr_set->policy_list, tunables_hook) {
-		wg_policy->up_rate_delay_ns = rate_limit_us * NSEC_PER_USEC;
-		update_min_rate_limit_ns(wg_policy);
-	}
+	list_for_each_entry(wg_policy, &attr_set->policy_list, tunables_hook)
+	wg_policy->freq_update_delay_ns = rate_limit_us * NSEC_PER_USEC;
 
 	return count;
 }
 
-static ssize_t down_rate_limit_us_store(struct gov_attr_set *attr_set,
-					const char *buf, size_t count)
-{
-	struct waltgov_tunables *tunables = to_waltgov_tunables(attr_set);
-	struct waltgov_policy *wg_policy;
-	unsigned int rate_limit_us;
-
-	if (task_is_zygote(current))
-		return count;
-
-	if (kstrtouint(buf, 10, &rate_limit_us))
-		return -EINVAL;
-
-	tunables->down_rate_limit_us = rate_limit_us;
-
-	list_for_each_entry(wg_policy, &attr_set->policy_list, tunables_hook) {
-		wg_policy->down_rate_delay_ns = rate_limit_us * NSEC_PER_USEC;
-		update_min_rate_limit_ns(wg_policy);
-	}
-
-	return count;
-}
-
-static struct governor_attr up_rate_limit_us = __ATTR_RW(up_rate_limit_us);
-static struct governor_attr down_rate_limit_us = __ATTR_RW(down_rate_limit_us);
+static struct governor_attr rate_limit_us = __ATTR_RW(rate_limit_us);
 
 static ssize_t hispeed_load_show(struct gov_attr_set *attr_set, char *buf)
 {
@@ -1016,8 +953,7 @@ WALTGOV_ATTR_RW(target_load_thresh);
 WALTGOV_ATTR_RW(target_load_shift);
 
 static struct attribute *waltgov_attributes[] = {
-	&up_rate_limit_us.attr,
-	&down_rate_limit_us.attr,
+	&rate_limit_us.attr,
 	&hispeed_load.attr,
 	&hispeed_freq.attr,
 	&rtg_boost_freq.attr,
@@ -1109,54 +1045,6 @@ static void waltgov_kthread_stop(struct waltgov_policy *wg_policy)
 	mutex_destroy(&wg_policy->work_lock);
 }
 
-static void waltgov_tunables_save(struct cpufreq_policy *policy,
-		struct waltgov_tunables *tunables)
-{
-	int cpu;
-	struct waltgov_tunables *cached = per_cpu(cached_tunables, policy->cpu);
-
-	if (!cached) {
-		cached = kzalloc(sizeof(*tunables), GFP_KERNEL);
-		if (!cached)
-			return;
-
-		for_each_cpu(cpu, policy->related_cpus)
-			per_cpu(cached_tunables, cpu) = cached;
-	}
-
-	cached->pl = tunables->pl;
-	cached->hispeed_load = tunables->hispeed_load;
-	cached->rtg_boost_freq = tunables->rtg_boost_freq;
-	cached->hispeed_freq = tunables->hispeed_freq;
-	cached->up_rate_limit_us = tunables->up_rate_limit_us;
-	cached->down_rate_limit_us = tunables->down_rate_limit_us;
-	cached->boost = tunables->boost;
-	cached->exp_util = tunables->exp_util;
-	cached->target_load_thresh = tunables->target_load_thresh;
-	cached->target_load_shift = tunables->target_load_shift;
-}
-
-static void waltgov_tunables_restore(struct cpufreq_policy *policy)
-{
-	struct waltgov_policy *wg_policy = policy->governor_data;
-	struct waltgov_tunables *tunables = wg_policy->tunables;
-	struct waltgov_tunables *cached = per_cpu(cached_tunables, policy->cpu);
-
-	if (!cached)
-		return;
-
-	tunables->pl = cached->pl;
-	tunables->hispeed_load = cached->hispeed_load;
-	tunables->rtg_boost_freq = cached->rtg_boost_freq;
-	tunables->hispeed_freq = cached->hispeed_freq;
-	tunables->up_rate_limit_us = cached->up_rate_limit_us;
-	tunables->down_rate_limit_us = cached->down_rate_limit_us;
-	tunables->boost	= cached->boost;
-	tunables->exp_util = cached->exp_util;
-	tunables->target_load_thresh = cached->target_load_thresh;
-	tunables->target_load_shift = cached->target_load_shift;
-}
-
 static int waltgov_init(struct cpufreq_policy *policy)
 {
 	struct waltgov_policy *wg_policy;
@@ -1188,8 +1076,7 @@ static int waltgov_init(struct cpufreq_policy *policy)
 		goto stop_kthread;
 	}
 
-	tunables->up_rate_limit_us = 500;
-	tunables->down_rate_limit_us = 2000;
+	tunables->rate_limit_us = 2000;
 	gov_attr_set_init(&tunables->attr_set, &wg_policy->tunables_hook);
 	tunables->hispeed_load = DEFAULT_HISPEED_LOAD;
 	spin_lock_init(&tunables->target_loads_lock);
@@ -1212,8 +1099,6 @@ static int waltgov_init(struct cpufreq_policy *policy)
 	wg_policy->tunables = tunables;
 
 	stale_ns = sched_ravg_window + (sched_ravg_window >> 3);
-
-	waltgov_tunables_restore(policy);
 
 	ret = kobject_init_and_add(&tunables->attr_set.kobj, &waltgov_tunables_ktype,
 				   get_governor_parent_kobj(policy), "%s",
@@ -1247,7 +1132,6 @@ static void waltgov_exit(struct cpufreq_policy *policy)
 	count = gov_attr_set_put(&tunables->attr_set, &wg_policy->tunables_hook);
 	policy->governor_data = NULL;
 	if (!count) {
-		waltgov_tunables_save(policy, tunables);
 		kfree(tunables);
 	}
 
@@ -1261,18 +1145,14 @@ static int waltgov_start(struct cpufreq_policy *policy)
 	struct waltgov_policy *wg_policy = policy->governor_data;
 	unsigned int cpu;
 
-	wg_policy->up_rate_delay_ns =
-		wg_policy->tunables->up_rate_limit_us * NSEC_PER_USEC;
-	wg_policy->down_rate_delay_ns =
-		wg_policy->tunables->down_rate_limit_us * NSEC_PER_USEC;
-	update_min_rate_limit_ns(wg_policy);
+	wg_policy->freq_update_delay_ns	= wg_policy->tunables->rate_limit_us * NSEC_PER_USEC;
 	wg_policy->last_freq_update_time	= 0;
 	wg_policy->next_freq			= 0;
 	wg_policy->work_in_progress		= false;
 	wg_policy->limits_changed		= false;
-	wg_policy->need_freq_update		= false;
 	wg_policy->cached_raw_freq		= 0;
 	wg_policy->prev_cached_raw_freq		= 0;
+	wg_policy->need_freq_update = cpufreq_driver_test_flags(CPUFREQ_NEED_UPDATE_LIMITS);
 
 	for_each_cpu(cpu, policy->cpus) {
 		struct waltgov_cpu *wg_cpu = &per_cpu(waltgov_cpu, cpu);
