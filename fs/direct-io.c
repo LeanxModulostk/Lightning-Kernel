@@ -39,6 +39,9 @@
 #include <linux/atomic.h>
 #include <linux/prefetch.h>
 
+#include <linux/fscrypt.h>
+#include <linux/blk_types.h>
+
 /*
  * How many user pages to map in one call to get_user_pages().  This determines
  * the size of a structure in the slab cache
@@ -479,6 +482,11 @@ static inline void dio_bio_submit(struct dio *dio, struct dio_submit *sdio)
 		bio_set_pages_dirty(bio);
 
 	dio->bio_disk = bio->bi_disk;
+
+#ifdef CONFIG_FS_HPB
+	if (dio->flags & DIO_HPB_IO)
+		bio->bi_opf |= REQ_HPB_PREFER;
+#endif
 
 	if (sdio->submit_io) {
 		sdio->submit_io(bio, dio->inode, sdio->logical_offset_in_bio);
