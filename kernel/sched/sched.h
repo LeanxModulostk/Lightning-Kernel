@@ -609,9 +609,7 @@ struct rt_rq {
 	unsigned long rt_nr_total;
 	int overloaded;
 	struct plist_head pushable_tasks;
-
 	struct sched_avg avg;
-
 #endif /* CONFIG_SMP */
 	int rt_queued;
 
@@ -2037,6 +2035,11 @@ static inline unsigned long capacity_orig_of(int cpu)
 	return cpu_rq(cpu)->cpu_capacity_orig;
 }
 
+static inline unsigned long cpu_bw_dl(struct rq *rq)
+{
+	return (rq->dl.running_bw * SCHED_CAPACITY_SCALE) >> BW_SHIFT;
+}
+
 static inline unsigned long task_util(struct task_struct *p)
 {
 #ifdef CONFIG_SCHED_WALT
@@ -2119,6 +2122,9 @@ static inline unsigned long cpu_util_cum(int cpu, int delta)
 
 	return (delta >= capacity) ? capacity : delta;
 }
+
+extern unsigned long stune_util(int cpu, unsigned long other_util,
+	struct sched_walt_cpu_load *walt_load);
 
 static inline unsigned long cpu_util_rt(int cpu)
 {

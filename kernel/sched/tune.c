@@ -475,6 +475,22 @@ int schedtune_cpu_boost(int cpu)
 	return bg->boost_max;
 }
 
+int schedtune_cpu_boost_walt(int cpu, struct task_struct *p)
+{
+	struct boost_groups *bg;
+	u64 now;
+	int task_boost = p ? schedtune_task_boost(p) : -100;
+
+	bg = &per_cpu(cpu_boost_groups, cpu);
+	now = sched_clock_cpu(cpu);
+
+	/* Check to see if we have a hold in effect */
+	if (schedtune_boost_timeout(now, bg->boost_ts))
+		schedtune_cpu_update(cpu, now);
+
+	return max(bg->boost_max, task_boost);
+}
+
 static inline int schedtune_adj_ta(struct task_struct *p)
 {
 	struct schedtune *st;
