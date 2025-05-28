@@ -73,10 +73,13 @@ static struct bpf_map *stack_map_alloc(union bpf_attr *attr)
 	    value_size / 8 > sysctl_perf_event_max_stack)
 		return ERR_PTR(-EINVAL);
 
-	/* hash table size must be power of 2 */
-	n_buckets = roundup_pow_of_two(attr->max_entries);
-	if (!n_buckets)
+	/* hash table size must be power of 2; roundup_pow_of_two() can overflow
+	 * into UB on 32-bit arches, so check that first
+	 */
+	if (attr->max_entries > 1UL << 31)
 		return ERR_PTR(-E2BIG);
+
+	n_buckets = roundup_pow_of_two(attr->max_entries);
 
 	cost = n_buckets * sizeof(struct stack_map_bucket *) + sizeof(*smap);
 	if (cost >= U32_MAX - PAGE_SIZE)
@@ -91,14 +94,10 @@ static struct bpf_map *stack_map_alloc(union bpf_attr *attr)
 	if (cost >= U32_MAX - PAGE_SIZE)
 		goto free_smap;
 
-	smap->map.map_type = attr->map_type;
-	smap->map.key_size = attr->key_size;
+	bpf_map_init_from_attr(&smap->map, attr);
 	smap->map.value_size = value_size;
-	smap->map.max_entries = attr->max_entries;
-	smap->map.map_flags = attr->map_flags;
 	smap->n_buckets = n_buckets;
 	smap->map.pages = round_up(cost, PAGE_SIZE) >> PAGE_SHIFT;
-	smap->map.numa_node = bpf_map_attr_numa_node(attr);
 
 	err = bpf_map_precharge_memlock(smap->map.pages);
 	if (err)
@@ -280,4 +279,5 @@ const struct bpf_map_ops stack_map_ops = {
 	.map_lookup_elem = stack_map_lookup_elem,
 	.map_update_elem = stack_map_update_elem,
 	.map_delete_elem = stack_map_delete_elem,
+	.map_check_btf = map_check_no_btf,
 };
