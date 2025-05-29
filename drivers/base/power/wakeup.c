@@ -30,6 +30,7 @@ suspend_state_t pm_suspend_target_state;
 #define pm_suspend_target_state	(PM_SUSPEND_ON)
 #endif
 
+
 #ifdef CONFIG_BOEFFLA_WL_BLOCKER
 #include "boeffla_wl_blocker.h"
 
@@ -39,6 +40,7 @@ bool wl_blocker_debug = false;
 
 static void wakeup_source_deactivate(struct wakeup_source *ws);
 #endif
+
 
 /*
  * If set, the suspend/hibernate code will abort transitions to a sleep state
@@ -631,9 +633,9 @@ static bool check_for_block(struct wakeup_source *ws)
 			return false;
 
 		// check if wakelock is in wake lock list to be blocked
-		sprintf(wakelock_name, ";%s;", ws->name);
+		sprintf(wakelock_name, "%s", ws->name);
 
-		if(strstr(list_wl_search, wakelock_name) == NULL)
+		if (!strstr(list_wl_search, wakelock_name))
 			return false;
 
 		// wake lock is in list, print it if debug mode on
@@ -658,6 +660,7 @@ static bool check_for_block(struct wakeup_source *ws)
 }
 #endif
 
+
 /**
  * wakeup_source_report_event - Report wakeup event using the given source.
  * @ws: Wakeup source to report the event for.
@@ -676,12 +679,11 @@ static void wakeup_source_report_event(struct wakeup_source *ws, bool hard)
 
 		if (!ws->active)
 			wakeup_source_activate(ws);
-		
-		if (hard)
-		pm_system_wakeup();
 #ifdef CONFIG_BOEFFLA_WL_BLOCKER
 	}
 #endif
+	if (hard)
+		pm_system_wakeup();
 }
 
 /**
@@ -706,6 +708,7 @@ void __pm_stay_awake(struct wakeup_source *ws)
 	spin_unlock_irqrestore(&ws->lock, flags);
 }
 EXPORT_SYMBOL_GPL(__pm_stay_awake);
+
 
 /**
  * pm_stay_awake - Notify the PM core that a wakeup event is being processed.
@@ -741,7 +744,6 @@ static void update_prevent_sleep_time(struct wakeup_source *ws, ktime_t now)
 static inline void update_prevent_sleep_time(struct wakeup_source *ws,
 					     ktime_t now) {}
 #endif
-
 
 /**
  * wakup_source_deactivate - Mark given wakeup source as inactive.
@@ -945,6 +947,9 @@ void pm_get_active_wakeup_sources(char *pending_wakeup_source, size_t max)
 						"Pending Wakeup Sources: ");
 			len += scnprintf(pending_wakeup_source + len, max - len,
 				"%s ", ws->name);
+#ifdef CONFIG_BOEFFLA_WL_BLOCKER
+			if (!check_for_block(ws))	// AP: check if wakelock is on wakelock blocker list
+#endif				
 			active = true;
 		} else if (!active &&
 			   (!last_active_ws ||
@@ -972,10 +977,7 @@ void pm_print_active_wakeup_sources(void)
 	list_for_each_entry_rcu(ws, &wakeup_sources, entry) {
 		if (ws->active) {
 			pr_debug("active wakeup source: %s\n", ws->name);
-#ifdef CONFIG_BOEFFLA_WL_BLOCKER
-			if (!check_for_block(ws))	// AP: check if wakelock is on wakelock blocker list
-#endif
-				active = 1;
+			active = 1;
 		} else if (!active &&
 			   (!last_activity_ws ||
 			    ktime_to_ns(ws->last_time) >
